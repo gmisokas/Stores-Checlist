@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="el">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#5b3a29">
+  <title>Checklist Καταστημάτων</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="app">
+    <header class="topbar">
+      <div class="brand">Lartecono DaVinci <span>· Checklist</span></div>
+    </header>
+
+    <div id="draft-banner" class="draft-banner" hidden>
+      Βλέπεις αλλαγές που <b>δεν έχουν αποθηκευτεί για όλους</b>.
+      <a href="#admin">Διαχείριση</a>
+    </div>
+
+    <!-- ===== Οθόνη checklist (υπάλληλος) ===== -->
+    <main id="view-checklist">
+      <section class="fields">
+        <label>Ημερομηνία
+          <input type="date" id="f-date">
+        </label>
+        <label>Υπεύθυνος
+          <input type="text" id="f-name" placeholder="Ονοματεπώνυμο" autocomplete="name">
+        </label>
+        <label>Κατάστημα
+          <select id="f-store"></select>
+        </label>
+      </section>
+
+      <div class="sticky">
+        <div class="seg" role="group" aria-label="Ενότητα">
+          <button type="button" data-section="opening">Άνοιγμα</button>
+          <button type="button" data-section="closing">Κλείσιμο</button>
+        </div>
+        <div class="progress">
+          <div class="bar"><div id="bar-fill"></div></div>
+          <div id="progress-text" class="progress-text"></div>
+        </div>
+      </div>
+
+      <p id="legend" class="legend" hidden>
+        <span class="swatch"></span>
+        Η χρωματισμένη γραμμή αφορά ιδιαιτερότητα του συγκεκριμένου καταστήματος.
+      </p>
+
+      <ol id="items" class="items"></ol>
+
+      <section class="actions">
+        <button type="button" id="btn-share" class="btn primary">Αποστολή στο Viber</button>
+        <button type="button" id="btn-print" class="btn">Εκτύπωση A4</button>
+        <button type="button" id="btn-reset" class="btn ghost">Καθαρισμός</button>
+      </section>
+
+      <footer class="foot"><a href="#admin">Διαχείριση</a></footer>
+    </main>
+
+    <!-- ===== Οθόνη διαχείρισης ===== -->
+    <main id="view-admin" hidden>
+      <div class="admin-head">
+        <a href="#" class="back">← Πίσω στο checklist</a>
+        <h1>Διαχείριση</h1>
+      </div>
+      <div class="tabs" role="tablist">
+        <button type="button" data-tab="general">Γενικό checklist</button>
+        <button type="button" data-tab="stores">Καταστήματα</button>
+        <button type="button" data-tab="save">Αποθήκευση</button>
+      </div>
+      <div id="admin-body"></div>
+    </main>
+  </div>
+
+  <!-- Περιοχή εκτύπωσης (φαίνεται μόνο στο χαρτί) -->
+  <div id="print-area"></div>
+
+  <!-- Παράθυρο για αντιγραφή κειμένου όταν δεν υπάρχει κοινοποίηση -->
+  <dialog id="text-dialog">
+    <p>Αντίγραψε το κείμενο και επικόλλησέ το στο Viber:</p>
+    <textarea id="text-dialog-text" rows="12" readonly></textarea>
+    <form method="dialog"><button class="btn">Κλείσιμο</button></form>
+  </dialog>
+
+  <div id="toast" class="toast" hidden></div>
+
+  <script src="app.js"></script>
+</body>
+</html>

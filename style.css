@@ -1,0 +1,292 @@
+:root {
+  color-scheme: light;
+  --brand: #5b3a29;
+  --brand-soft: #f3ebe4;
+  --bg: #faf8f6;
+  --card: #ffffff;
+  --text: #222222;
+  --muted: #6b6b6b;
+  --line: #e2ddd8;
+  --ok: #2e7d32;
+  --ok-soft: #e6f4e7;
+  --no: #c62828;
+  --no-soft: #fdeaea;
+  --extra: #fff3c4;
+  --extra-line: #e0a800;
+  --important: #c62828;
+}
+
+* { box-sizing: border-box; }
+
+[hidden] { display: none !important; }
+
+html, body { margin: 0; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font: 16px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+}
+
+button, input, select, textarea { font: inherit; color: inherit; }
+
+#app { max-width: 720px; margin: 0 auto; padding: 0 16px 32px; }
+
+.topbar {
+  margin: 0 -16px;
+  padding: 12px 16px;
+  background: var(--brand);
+  color: #fff;
+}
+.brand { font-weight: 700; font-size: 18px; }
+.brand span { font-weight: 400; opacity: .8; }
+
+.draft-banner {
+  margin: 12px 0 0;
+  padding: 10px 12px;
+  background: #fff8e1;
+  border: 1px solid var(--extra-line);
+  border-radius: 8px;
+  font-size: 14px;
+}
+.draft-banner a { color: var(--brand); font-weight: 600; }
+
+/* ---------- Πεδία κορυφής ---------- */
+.fields { display: grid; gap: 10px; margin: 16px 0 12px; }
+.fields label { display: grid; gap: 4px; font-size: 14px; color: var(--muted); }
+.fields input, .fields select {
+  width: 100%;
+  min-height: 44px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--card);
+  color: var(--text);
+}
+
+/* ---------- Ενότητα + πρόοδος ---------- */
+.sticky {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  margin: 0 -16px;
+  padding: 10px 16px;
+  background: var(--bg);
+  border-bottom: 1px solid var(--line);
+}
+.seg { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.seg button {
+  min-height: 48px;
+  border: 2px solid var(--brand);
+  border-radius: 10px;
+  background: var(--card);
+  color: var(--brand);
+  font-weight: 700;
+  font-size: 17px;
+}
+.seg button[aria-pressed="true"] { background: var(--brand); color: #fff; }
+
+.progress { margin-top: 10px; }
+.bar { height: 8px; background: var(--line); border-radius: 4px; overflow: hidden; }
+#bar-fill { height: 100%; width: 0; background: var(--ok); transition: width .2s; }
+.progress-text { margin-top: 4px; font-size: 13px; color: var(--muted); }
+
+.legend {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin: 12px 0 0;
+  font-size: 14px;
+}
+.swatch {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  background: var(--extra);
+  border-left: 4px solid var(--extra-line);
+  border-radius: 3px;
+}
+
+/* ---------- Γραμμές checklist ---------- */
+.items { list-style: none; margin: 12px 0; padding: 0; display: grid; gap: 8px; }
+
+.item {
+  padding: 10px 12px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+.item.extra { background: var(--extra); border-left: 5px solid var(--extra-line); }
+.item.important .text { color: var(--important); font-weight: 800; }
+.item.st-ok { border-color: var(--ok); }
+.item.st-no { border-color: var(--no); }
+
+.item-main { display: flex; gap: 8px; }
+.num { flex: none; min-width: 26px; color: var(--muted); font-weight: 600; }
+
+.item-actions { display: flex; gap: 8px; margin-top: 8px; }
+.mark {
+  width: 56px;
+  height: 44px;
+  border: 2px solid var(--line);
+  border-radius: 8px;
+  background: var(--card);
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--muted);
+}
+.mark.ok[aria-pressed="true"] { background: var(--ok); border-color: var(--ok); color: #fff; }
+.mark.no[aria-pressed="true"] { background: var(--no); border-color: var(--no); color: #fff; }
+
+.note-btn {
+  margin-left: auto;
+  padding: 0 12px;
+  height: 44px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--card);
+  color: var(--muted);
+  font-size: 14px;
+}
+.note-btn.has { color: var(--brand); border-color: var(--brand); font-weight: 600; }
+
+.note {
+  display: block;
+  width: 100%;
+  margin-top: 8px;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  resize: vertical;
+}
+
+/* ---------- Κουμπιά ---------- */
+.actions { display: grid; gap: 10px; margin-top: 20px; }
+.btn {
+  min-height: 48px;
+  padding: 10px 16px;
+  border: 1px solid var(--brand);
+  border-radius: 10px;
+  background: var(--card);
+  color: var(--brand);
+  font-weight: 600;
+}
+.btn.primary { background: #7360f2; border-color: #7360f2; color: #fff; }
+.btn.dark { background: var(--brand); color: #fff; }
+.btn.ghost { border-color: var(--line); color: var(--muted); }
+.btn.danger { border-color: var(--no); color: var(--no); }
+.btn:disabled { opacity: .5; }
+
+.foot { margin-top: 28px; text-align: center; font-size: 14px; }
+.foot a { color: var(--muted); }
+
+/* ---------- Διαχείριση ---------- */
+.admin-head { margin: 16px 0 8px; }
+.admin-head h1 { margin: 6px 0 0; font-size: 22px; }
+.back { color: var(--brand); font-size: 14px; }
+
+.tabs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-bottom: 14px; }
+.tabs button {
+  min-height: 42px;
+  padding: 4px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--card);
+  font-size: 14px;
+}
+.tabs button[aria-selected="true"] { background: var(--brand); border-color: var(--brand); color: #fff; font-weight: 600; }
+
+.hint { font-size: 14px; color: var(--muted); margin: 8px 0; }
+.warn { font-size: 14px; color: var(--no); margin: 8px 0; }
+
+.ed-list { display: grid; gap: 8px; margin: 12px 0; }
+.ed-row {
+  padding: 10px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+.ed-row.extra { background: var(--extra); border-left: 5px solid var(--extra-line); }
+.ed-row.important textarea { color: var(--important); font-weight: 800; }
+.ed-row textarea, .ed-row select, .field input, .field select {
+  width: 100%;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+}
+.ed-row textarea { resize: vertical; }
+.ed-top { display: flex; gap: 8px; align-items: flex-start; }
+.ed-top textarea { flex: 1; }
+.ed-tools { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 8px; }
+.ed-tools button {
+  min-width: 40px;
+  height: 38px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--card);
+}
+.ed-tools button.danger { color: var(--no); border-color: var(--no); margin-left: auto; }
+.chk { display: inline-flex; gap: 6px; align-items: center; font-size: 14px; color: var(--important); font-weight: 600; }
+
+.field { display: grid; gap: 4px; margin: 10px 0; font-size: 14px; color: var(--muted); }
+.field input, .field select { min-height: 44px; color: var(--text); }
+.row { display: flex; gap: 8px; align-items: flex-end; }
+.row > .field { flex: 1; }
+
+.box {
+  margin: 14px 0;
+  padding: 12px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+.box h2 { margin: 0 0 6px; font-size: 17px; }
+.stack { display: grid; gap: 10px; }
+
+/* ---------- Μηνύματα ---------- */
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: 20px;
+  transform: translateX(-50%);
+  max-width: calc(100% - 32px);
+  padding: 12px 16px;
+  background: #333;
+  color: #fff;
+  border-radius: 10px;
+  font-size: 15px;
+  z-index: 20;
+}
+
+dialog { width: min(560px, calc(100% - 32px)); border: 1px solid var(--line); border-radius: 12px; }
+dialog textarea { width: 100%; }
+
+#print-area { display: none; }
+
+/* ---------- Εκτύπωση A4 ---------- */
+@page { size: A4; margin: 10mm; }
+
+@media print {
+  body { background: #fff; }
+  #app, .toast, dialog { display: none !important; }
+  #print-area { display: block; font-size: 8.8pt; line-height: 1.2; }
+  #print-area * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+
+  .p-title { margin: 0 0 3mm; font-size: 13pt; }
+  .p-fields { display: flex; gap: 6mm; margin-bottom: 3mm; font-size: 10pt; }
+  .p-fields span { flex: 1; border-bottom: 1px solid #000; padding-bottom: 1mm; }
+  .p-legend { display: flex; gap: 2mm; align-items: center; margin: 0 0 2mm; font-size: 8.5pt; }
+
+  .p-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+  .p-table th, .p-table td { border: 1px solid #555; padding: 0.8mm 1.5mm; vertical-align: top; }
+  .p-table th { background: #eee; text-align: left; }
+  .p-table tr { break-inside: avoid; }
+  .p-table .c-num { width: 8mm; text-align: center; }
+  .p-table .c-mark { width: 9mm; text-align: center; font-size: 11pt; font-weight: 700; }
+  .p-table .c-note { width: 48mm; }
+  .p-table tr.extra td { background: var(--extra); }
+  .p-table tr.important td.c-text { color: var(--important); font-weight: 800; }
+}

@@ -595,6 +595,52 @@ function toBase64(str) {
   return btoa(bin);
 }
 
+async function githubDetail(e) {
+  try {
+    if (e && typeof e.json === 'function') {
+      const j = await e.clone().json();
+      return `${e.status}: ${j.message || ''}`.trim();
+    }
+  } catch (x) { /* τίποτα */ }
+  return e && e.message ? String(e.message) : '';
+}
+
+async function testToken(out) {
+  const s = getSettings();
+  const tok = s.token || '';
+  const lines = [];
+  lines.push(tok
+    ? `Κλειδί στη συσκευή: αρχίζει «${tok.slice(0, 11)}», μήκος ${tok.length} χαρακτήρες.`
+    : 'Δεν υπάρχει κλειδί αποθηκευμένο σε αυτή τη συσκευή.');
+  out.textContent = lines.join('\n');
+  if (!tok) return;
+  if (!/^[\x21-\x7e]+$/.test(tok)) {
+    out.textContent = lines.concat('Το κλειδί έχει περίεργους χαρακτήρες (π.χ. ελληνικά ή «…»). Ξαναγράψ’ το με επικόλληση από το GitHub.').join('\n');
+    return;
+  }
+  const headers = { Authorization: 'Bearer ' + tok, Accept: 'application/vnd.github+json' };
+  try {
+    const u = await fetch('https://api.github.com/user', { headers, cache: 'no-store' });
+    if (!u.ok) {
+      lines.push(`Το GitHub δεν δέχεται το κλειδί → ${await githubDetail(u)}`);
+      out.textContent = lines.join('\n');
+      return;
+    }
+    lines.push(`Το κλειδί ισχύει για τον λογαριασμό «${(await u.json()).login}».`);
+    const r = await fetch(`https://api.github.com/repos/${encodeURIComponent(s.owner)}/${encodeURIComponent(s.repo)}`, { headers, cache: 'no-store' });
+    if (!r.ok) lines.push(`Το repo «${s.owner}/${s.repo}» δεν φαίνεται από αυτό το κλειδί → ${await githubDetail(r)}`);
+    else {
+      const j = await r.json();
+      lines.push(j.permissions && j.permissions.push
+        ? 'Το repo βρέθηκε και το κλειδί έχει δικαίωμα εγγραφής. Όλα εντάξει ✅'
+        : 'Το repo βρέθηκε, αλλά το κλειδί ΔΕΝ έχει δικαίωμα εγγραφής. Στο Contents βάλε «Read and write».');
+    }
+  } catch (e) {
+    lines.push('Δεν έγινε σύνδεση με το GitHub. Έλεγξε το ίντερνετ. ' + (e && e.message ? e.message : ''));
+  }
+  out.textContent = lines.join('\n');
+}
+
 async function saveToGithub(btn) {
   const s = getSettings();
   if (!s.token) { toast('Βάλε πρώτα το κλειδί (token) στις ρυθμίσεις παρακάτω.'); return; }
@@ -633,12 +679,13 @@ async function saveToGithub(btn) {
     toast('Αποθηκεύτηκε! Σε 1–2 λεπτά θα το βλέπουν όλα τα κινητά.', 6000);
   } catch (e) {
     const status = e && e.status;
+    const detail = await githubDetail(e);
     const msg = status === 401 ? 'Το κλειδί (token) δεν είναι σωστό ή έληξε.'
       : status === 403 ? 'Το κλειδί δεν έχει δικαίωμα εγγραφής σε αυτό το repo.'
         : status === 404 ? 'Δεν βρέθηκε το repo ή ο κλάδος (branch). Έλεγξε τις ρυθμίσεις.'
           : status === 409 || status === 422 ? 'Το αρχείο άλλαξε στο μεταξύ. Δοκίμασε ξανά.'
             : 'Δεν έγινε αποθήκευση. Έλεγξε τη σύνδεση.';
-    toast(msg, 6000);
+    toast(msg + (detail ? ` (${detail})` : ''), 9000);
     btn.disabled = false;
     btn.textContent = 'Αποθήκευση για όλους';
   }
@@ -681,6 +728,7 @@ function adminSave() {
   const saveSettings = () => {
     const v = {};
     for (const k of Object.keys(inputs)) v[k] = inputs[k].value.trim();
+    v.token = v.token.replace(/[\s\u200b-\u200d\ufeff]+/g, '');
     lsSet(LS.settings, v);
     toast('Οι ρυθμίσεις αποθηκεύτηκαν σε αυτή τη συσκευή.');
     renderAdmin();
@@ -701,7 +749,9 @@ function adminSave() {
       h('label', { class: 'field' }, 'Λογαριασμός GitHub', inputs.owner),
       h('label', { class: 'field' }, 'Repo', inputs.repo),
       h('label', { class: 'field' }, 'Κλάδος (branch)', inputs.branch),
-      h('button', { type: 'button', class: 'btn', onclick: saveSettings }, 'Αποθήκευση ρυθμίσεων')));
+      h('button', { type: 'button', class: 'btn', onclick: saveSettings }, 'Αποθήκευση ρυθμίσεων'),
+      h('button', { type: 'button', class: 'btn', onclick: () => testToken($('token-result')) }, 'Δοκιμή κλειδιού'),
+      h('pre', { id: 'token-result', class: 'hint result' })));
 }
 
 /* ---------- Οδηγίες «Προσθήκη στην αρχική οθόνη» ---------- */

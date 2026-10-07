@@ -3,15 +3,28 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#5b3a29">
-  <title>Checklist Καταστημάτων</title>
+  <meta name="theme-color" content="#1b2d47">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Lartecono Checklist">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
+  <link rel="icon" type="image/png" href="assets/favicon.png">
+  <title>Lartecono Stores Checklist</title>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
   <div id="app">
     <header class="topbar">
-      <div class="brand">Lartecono DaVinci <span>· Checklist</span></div>
+      <img class="logo" src="assets/logo.png" alt="Lartecono DaVinci">
+      <div id="top-date" class="top-date"></div>
     </header>
+
+    <section class="hero">
+      <div class="hero-title">Checklist Καταστήματος</div>
+      <div id="hero-sub" class="hero-sub"></div>
+    </section>
 
     <div id="draft-banner" class="draft-banner" hidden>
       Βλέπεις αλλαγές που <b>δεν έχουν αποθηκευτεί για όλους</b>.
@@ -56,7 +69,7 @@
         <button type="button" id="btn-reset" class="btn ghost">Καθαρισμός</button>
       </section>
 
-      <footer class="foot"><a href="#admin">Διαχείριση</a></footer>
+      <footer class="foot"><a href="#" id="open-a2hs">Οδηγίες εγκατάστασης</a> · <a href="#admin">Διαχείριση</a></footer>
     </main>
 
     <!-- ===== Οθόνη διαχείρισης ===== -->
@@ -82,6 +95,29 @@
     <p>Αντίγραψε το κείμενο και επικόλλησέ το στο Viber:</p>
     <textarea id="text-dialog-text" rows="12" readonly></textarea>
     <form method="dialog"><button class="btn">Κλείσιμο</button></form>
+  </dialog>
+
+  <dialog id="a2hs">
+    <h2>Βάλε την εφαρμογή στην αρχική οθόνη</h2>
+    <p class="hint">Έτσι ανοίγει με ένα πάτημα, σαν κανονική εφαρμογή.</p>
+    <div class="seg" role="group" aria-label="Συσκευή">
+      <button type="button" data-os="ios">iPhone</button>
+      <button type="button" data-os="android">Android</button>
+    </div>
+    <ol id="a2hs-ios" class="steps">
+      <li>Άνοιξε τη σελίδα με το <b>Safari</b>.</li>
+      <li>Πάτα το κουμπί <b>Κοινοποίηση</b> (τετράγωνο με βέλος προς τα πάνω, κάτω στη μέση).</li>
+      <li>Κατέβα και διάλεξε <b>«Προσθήκη στην οθόνη Αφετηρίας»</b>.</li>
+      <li>Πάτα <b>«Προσθήκη»</b> πάνω δεξιά.</li>
+    </ol>
+    <ol id="a2hs-android" class="steps" hidden>
+      <li>Άνοιξε τη σελίδα με το <b>Chrome</b>.</li>
+      <li>Πάτα το μενού <b>⋮</b> (τρεις τελείες πάνω δεξιά).</li>
+      <li>Διάλεξε <b>«Προσθήκη στην αρχική οθόνη»</b> (ή «Εγκατάσταση εφαρμογής»).</li>
+      <li>Πάτα <b>«Προσθήκη»</b> ή «Εγκατάσταση».</li>
+    </ol>
+    <label class="chk-row"><input type="checkbox" id="a2hs-hide"> Να μην ερωτηθώ ξανά</label>
+    <button type="button" class="btn dark" id="a2hs-ok">Το κατάλαβα</button>
   </dialog>
 
   <div id="toast" class="toast" hidden></div>

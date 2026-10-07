@@ -193,7 +193,15 @@ function fillStoreSelect() {
   f.store.value = state.data.stores.some((s) => s.id === keep) ? keep : '';
 }
 
+function updateHeader() {
+  const d = fmtDate(f.date.value);
+  $('top-date').textContent = d ? 'Ημερομηνία: ' + d : '';
+  const st = currentStore();
+  $('hero-sub').textContent = [st ? st.name : '', d ? 'Ημερομηνία: ' + d : ''].filter(Boolean).join(' · ');
+}
+
 function renderChecklist() {
+  updateHeader();
   const rows = buildRows(state.section, currentStore());
   const prog = getProg();
   $('items').replaceChildren(...rows.map((r, i) => rowEl(r, i + 1, prog)));
@@ -696,6 +704,36 @@ function adminSave() {
       h('button', { type: 'button', class: 'btn', onclick: saveSettings }, 'Αποθήκευση ρυθμίσεων')));
 }
 
+/* ---------- Οδηγίες «Προσθήκη στην αρχική οθόνη» ---------- */
+
+const A2HS_HIDE = 'cl-a2hs-hide';
+
+function isStandalone() {
+  return window.navigator.standalone === true ||
+    (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches);
+}
+
+function showA2hs(os) {
+  const dlg = $('a2hs');
+  os = os || (/android/i.test(navigator.userAgent) ? 'android' : 'ios');
+  dlg.querySelectorAll('.seg button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.os === os)));
+  $('a2hs-ios').hidden = os !== 'ios';
+  $('a2hs-android').hidden = os !== 'android';
+  $('a2hs-hide').checked = !!lsGet(A2HS_HIDE, false);
+  if (!dlg.open) dlg.showModal();
+}
+
+function initA2hs() {
+  const dlg = $('a2hs');
+  dlg.querySelectorAll('.seg button').forEach((b) => b.addEventListener('click', () => showA2hs(b.dataset.os)));
+  $('a2hs-ok').addEventListener('click', () => {
+    if ($('a2hs-hide').checked) lsSet(A2HS_HIDE, true); else lsDel(A2HS_HIDE);
+    dlg.close();
+  });
+  $('open-a2hs').addEventListener('click', (e) => { e.preventDefault(); showA2hs(); });
+  if (!isStandalone() && !lsGet(A2HS_HIDE, false) && location.hash !== '#admin') showA2hs();
+}
+
 /* ==========================================================
    Πλοήγηση & εκκίνηση
    ========================================================== */
@@ -751,6 +789,7 @@ async function init() {
 
   window.addEventListener('hashchange', route);
   route();
+  initA2hs();
 }
 
 init();

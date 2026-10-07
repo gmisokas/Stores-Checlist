@@ -1,0 +1,15 @@
+{
+  "name": "Lartecono Stores Checklist",
+  "short_name": "Lartecono",
+  "description": "Checklist ανοίγματος και κλεισίματος καταστημάτων",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#eceff7",
+  "theme_color": "#1b2d47",
+  "lang": "el",
+  "icons": [
+    { "src": "assets/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "assets/icon-512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}

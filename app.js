@@ -250,20 +250,28 @@ function rowEl(r, n, prog) {
 }
 
 // Επιλογή υπευθύνου και άνοιγμα της συνομιλίας του στο Viber.
-function safeViber(u) {
-  u = String(u || '').trim();
-  return /^(viber:\/\/|https:\/\/)/i.test(u) ? u : '';
+// Δέχεται 69XXXXXXXX, +30…, 0030… ή παλιό σύνδεσμο viber:// και δίνει τα ψηφία με κωδικό χώρας.
+function phoneDigits(c) {
+  let d = String((c && (c.phone || c.viber)) || '').replace(/%2B/gi, '').replace(/\D/g, '');
+  if (d.startsWith('00')) d = d.slice(2);
+  if (d.length === 10 && /^[26]/.test(d)) d = '30' + d;
+  return d.length >= 11 ? d : '';
+}
+
+function viberLink(c) {
+  const d = phoneDigits(c);
+  return d ? 'viber://chat?number=%2B' + d : '';
 }
 
 function notifyBox() {
   const store = currentStore();
-  const contacts = ((store && store.contacts) || []).filter((c) => c.name && safeViber(c.viber));
+  const contacts = ((store && store.contacts) || []).filter((c) => c.name && viberLink(c));
   if (!contacts.length) return null;
   const link = h('a', { class: 'btn viber', 'aria-disabled': 'true', role: 'button' }, 'Άνοιγμα συνομιλίας στο Viber');
   const sel = h('select', {
     onchange: (e) => {
       const c = contacts.find((x) => x.id === e.target.value);
-      if (c) { link.href = safeViber(c.viber); link.removeAttribute('aria-disabled'); }
+      if (c) { link.href = viberLink(c); link.removeAttribute('aria-disabled'); }
       else { link.removeAttribute('href'); link.setAttribute('aria-disabled', 'true'); }
     },
   }, h('option', { value: '' }, '— Επίλεξε υπεύθυνο —'),
@@ -548,12 +556,12 @@ function adminStores() {
         onchange: () => renderAdmin(),
       })),
     h('h2', {}, 'Υπεύθυνοι για ενημέρωση (Viber)'),
-    h('p', { class: 'hint' }, 'Εμφανίζονται κάτω από κάθε γενική γραμμή που έχει την επιλογή «Επιλογή υπευθύνου (Viber)». Ο σύνδεσμος Viber είναι της μορφής viber://chat?number=%2B30694XXXXXXX'),
+    h('p', { class: 'hint' }, 'Εμφανίζονται κάτω από κάθε γενική γραμμή που έχει την επιλογή «Επιλογή υπευθύνου (Viber)». Γράψε το κινητό του υπευθύνου, π.χ. 6943554348. Τον σύνδεσμο Viber τον φτιάχνει η εφαρμογή.'),
     h('div', { class: 'ed-list' }, store.contacts.map((c) => contactEditor(store, c))),
     h('button', {
       type: 'button',
       class: 'btn',
-      onclick: () => { store.contacts.push({ id: newId('p'), name: '', viber: '' }); markDirty(true); },
+      onclick: () => { store.contacts.push({ id: newId('p'), name: '', phone: '' }); markDirty(true); },
     }, '+ Προσθήκη υπευθύνου'),
     h('h2', {}, 'Ιδιαιτερότητες καταστήματος'),
     h('p', { class: 'hint' }, 'Έξτρα γραμμές μόνο για αυτό το κατάστημα. Εμφανίζονται χρωματισμένες, στη θέση που θα διαλέξεις.'),
@@ -568,13 +576,13 @@ function contactEditor(store, c) {
   return h('div', { class: 'ed-row' },
     h('label', { class: 'field' }, 'Όνομα υπευθύνου',
       h('input', { type: 'text', value: c.name, placeholder: 'Ονοματεπώνυμο', oninput: (e) => { c.name = e.target.value; markDirty(false); } })),
-    h('label', { class: 'field' }, 'Σύνδεσμος Viber',
+    h('label', { class: 'field' }, 'Κινητό (Viber)',
       h('input', {
-        type: 'text',
-        value: c.viber,
-        placeholder: 'viber://chat?number=%2B30…',
-        autocapitalize: 'off',
-        oninput: (e) => { c.viber = e.target.value; markDirty(false); },
+        type: 'tel',
+        value: c.phone || (phoneDigits(c) ? phoneDigits(c).replace(/^30/, '') : ''),
+        placeholder: '69XXXXXXXX',
+        inputmode: 'tel',
+        oninput: (e) => { c.phone = e.target.value; delete c.viber; markDirty(false); },
       })),
     h('div', { class: 'ed-tools' },
       h('button', {
@@ -656,8 +664,8 @@ function cleanData(data) {
     .map((st) => Object.assign(st, {
       name: (st.name || '').trim() || 'Χωρίς όνομα',
       contacts: (st.contacts || [])
-        .map((c) => Object.assign(c, { name: (c.name || '').trim(), viber: (c.viber || '').trim() }))
-        .filter((c) => c.name && safeViber(c.viber)),
+        .map((c) => ({ id: c.id, name: (c.name || '').trim(), phone: phoneDigits(c).replace(/^30(?=\d{10}$)/, '') }))
+        .filter((c) => c.name && c.phone),
       extras: st.extras
         .map((x) => Object.assign(x, { text: (x.text || '').trim() }))
         .filter((x) => x.text),

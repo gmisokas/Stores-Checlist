@@ -40,7 +40,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
   padding: 8px 16px;
   background: #fff;
 }
-.logo { display: block; height: 56px; width: auto; }
+.logo { display: block; height: 64px; width: auto; }
 .top-date { font-size: 15px; font-weight: 600; color: var(--brand); text-align: right; }
 
 .hero {

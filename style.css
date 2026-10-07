@@ -312,3 +312,6 @@ dialog textarea { width: 100%; }
   .p-table tr.extra td { background: var(--extra); }
   .p-table tr.important td.c-text { color: var(--important); font-weight: 800; }
 }
+
+.result { white-space: pre-wrap; word-break: break-word; font: inherit; font-size: 14px; }
+.box .btn { width: 100%; margin-top: 10px; }

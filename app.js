@@ -101,6 +101,8 @@ function normalize(data) {
   data.stores = Array.isArray(data.stores) ? data.stores : [];
   data.stores.forEach((st) => {
     if (!st.id) st.id = newId('s');
+    st.contacts = Array.isArray(st.contacts) ? st.contacts : [];
+    st.contacts.forEach((c) => { if (!c.id) c.id = newId('p'); });
     st.extras = Array.isArray(st.extras) ? st.extras : [];
     st.extras.forEach((x) => {
       if (!x.id) x.id = newId('x');
@@ -140,6 +142,7 @@ function currentStore() {
 
 // Ενώνει γενικές γραμμές και ιδιαιτερότητες καταστήματος στη σωστή σειρά.
 function buildRows(section, store) {
+  if (!SECTIONS[section]) return [];
   const general = state.data.general[section] || [];
   const extras = ((store && store.extras) || []).filter((x) => x.section === section);
   const ids = new Set(general.map((g) => g.id));
@@ -150,7 +153,7 @@ function buildRows(section, store) {
 
   pushExtras('start');
   general.forEach((g) => {
-    rows.push({ key: g.id, text: g.text, important: !!g.important });
+    rows.push({ key: g.id, text: g.text, important: !!g.important, notify: !!g.notify });
     pushExtras(g.id);
   });
   // Αν σβήστηκε η γραμμή αναφοράς, η ιδιαιτερότητα πάει στο τέλος.
@@ -204,8 +207,13 @@ function renderChecklist() {
   updateHeader();
   const rows = buildRows(state.section, currentStore());
   const prog = getProg();
-  $('items').replaceChildren(...rows.map((r, i) => rowEl(r, i + 1, prog)));
+  const chosen = !!SECTIONS[state.section];
+  $('items').replaceChildren(...(chosen
+    ? rows.map((r, i) => rowEl(r, i + 1, prog))
+    : [h('li', { class: 'pick-hint' }, 'Επίλεξε «Άνοιγμα» ή «Κλείσιμο» για να εμφανιστεί η λίστα.')]));
   $('legend').hidden = !rows.some((r) => r.extra);
+  document.querySelector('#view-checklist .progress').hidden = !chosen;
+  document.querySelector('#view-checklist .actions').hidden = !chosen;
   document.querySelectorAll('#view-checklist .seg button').forEach((b) => {
     b.setAttribute('aria-pressed', String(b.dataset.section === state.section));
   });
@@ -237,7 +245,32 @@ function rowEl(r, n, prog) {
       class: 'note-btn' + (p.n ? ' has' : ''),
       onclick: () => { note.hidden = !note.hidden; if (!note.hidden) note.focus(); },
     }, 'Σημείωση')),
-  note);
+  note,
+  r.notify ? notifyBox() : null);
+}
+
+// Επιλογή υπευθύνου και άνοιγμα της συνομιλίας του στο Viber.
+function safeViber(u) {
+  u = String(u || '').trim();
+  return /^(viber:\/\/|https:\/\/)/i.test(u) ? u : '';
+}
+
+function notifyBox() {
+  const store = currentStore();
+  const contacts = ((store && store.contacts) || []).filter((c) => c.name && safeViber(c.viber));
+  if (!contacts.length) return null;
+  const link = h('a', { class: 'btn viber', 'aria-disabled': 'true', role: 'button' }, 'Άνοιγμα συνομιλίας στο Viber');
+  const sel = h('select', {
+    onchange: (e) => {
+      const c = contacts.find((x) => x.id === e.target.value);
+      if (c) { link.href = safeViber(c.viber); link.removeAttribute('aria-disabled'); }
+      else { link.removeAttribute('href'); link.setAttribute('aria-disabled', 'true'); }
+    },
+  }, h('option', { value: '' }, '— Επίλεξε υπεύθυνο —'),
+  ...contacts.map((c) => h('option', { value: c.id }, c.name)));
+  return h('div', { class: 'notify' },
+    h('label', {}, 'Επίλεξε υπεύθυνο για ενημέρωση', sel),
+    link);
 }
 
 function setMark(key, val) {
@@ -277,6 +310,7 @@ function stats() {
 }
 
 function updateProgress() {
+  if (!SECTIONS[state.section]) { $('progress-text').textContent = ''; $('bar-fill').style.width = '0'; return; }
   const s = stats();
   const total = s.rows.length || 1;
   $('bar-fill').style.width = Math.round(((s.ok + s.no) / total) * 100) + '%';
@@ -311,6 +345,7 @@ function summaryText() {
 }
 
 async function share() {
+  if (!SECTIONS[state.section]) { toast('Επίλεξε πρώτα Άνοιγμα ή Κλείσιμο.'); return; }
   if (state.data.stores.length && !f.store.value) { toast('Επίλεξε πρώτα κατάστημα.'); f.store.focus(); return; }
   if (!f.name.value.trim()) { toast('Συμπλήρωσε το όνομα του υπευθύνου.'); f.name.focus(); return; }
   const s = stats();
@@ -445,6 +480,13 @@ function adminGeneral() {
               onchange: (e) => { if (e.target.checked) it.important = true; else delete it.important; markDirty(true); },
             }),
             'Κόκκινα έντονα'),
+          h('label', { class: 'chk notify-chk' },
+            h('input', {
+              type: 'checkbox',
+              checked: !!it.notify,
+              onchange: (e) => { if (e.target.checked) it.notify = true; else delete it.notify; markDirty(true); },
+            }),
+            'Επιλογή υπευθύνου (Viber)'),
           h('button', { type: 'button', 'aria-label': 'Πάνω', disabled: i === 0, onclick: () => move(i, -1) }, '↑'),
           h('button', { type: 'button', 'aria-label': 'Κάτω', disabled: i === items.length - 1, onclick: () => move(i, 1) }, '↓'),
           h('button', { type: 'button', class: 'danger', onclick: () => del(i) }, 'Διαγραφή'))))),
@@ -462,7 +504,7 @@ function adminStores() {
   const addStore = () => {
     const name = prompt('Όνομα νέου καταστήματος:');
     if (!name || !name.trim()) return;
-    const st = { id: newId('s'), name: name.trim(), extras: [] };
+    const st = { id: newId('s'), name: name.trim(), contacts: [], extras: [] };
     stores.push(st);
     state.adminStore = st.id;
     markDirty(true);
@@ -505,6 +547,14 @@ function adminStores() {
         oninput: (e) => { store.name = e.target.value; markDirty(false); },
         onchange: () => renderAdmin(),
       })),
+    h('h2', {}, 'Υπεύθυνοι για ενημέρωση (Viber)'),
+    h('p', { class: 'hint' }, 'Εμφανίζονται κάτω από κάθε γενική γραμμή που έχει την επιλογή «Επιλογή υπευθύνου (Viber)». Ο σύνδεσμος Viber είναι της μορφής viber://chat?number=%2B30694XXXXXXX'),
+    h('div', { class: 'ed-list' }, store.contacts.map((c) => contactEditor(store, c))),
+    h('button', {
+      type: 'button',
+      class: 'btn',
+      onclick: () => { store.contacts.push({ id: newId('p'), name: '', viber: '' }); markDirty(true); },
+    }, '+ Προσθήκη υπευθύνου'),
     h('h2', {}, 'Ιδιαιτερότητες καταστήματος'),
     h('p', { class: 'hint' }, 'Έξτρα γραμμές μόνο για αυτό το κατάστημα. Εμφανίζονται χρωματισμένες, στη θέση που θα διαλέξεις.'),
     h('div', { class: 'ed-list' }, store.extras.map((x) => extraEditor(store, x))),
@@ -512,6 +562,30 @@ function adminStores() {
       h('button', { type: 'button', class: 'btn', onclick: addExtra }, '+ Προσθήκη ιδιαιτερότητας'),
       h('button', { type: 'button', class: 'btn danger', onclick: delStore }, 'Διαγραφή καταστήματος')),
     saveReminder());
+}
+
+function contactEditor(store, c) {
+  return h('div', { class: 'ed-row' },
+    h('label', { class: 'field' }, 'Όνομα υπευθύνου',
+      h('input', { type: 'text', value: c.name, placeholder: 'Ονοματεπώνυμο', oninput: (e) => { c.name = e.target.value; markDirty(false); } })),
+    h('label', { class: 'field' }, 'Σύνδεσμος Viber',
+      h('input', {
+        type: 'text',
+        value: c.viber,
+        placeholder: 'viber://chat?number=%2B30…',
+        autocapitalize: 'off',
+        oninput: (e) => { c.viber = e.target.value; markDirty(false); },
+      })),
+    h('div', { class: 'ed-tools' },
+      h('button', {
+        type: 'button',
+        class: 'danger',
+        onclick: () => {
+          if (!confirm(`Διαγραφή του υπευθύνου «${c.name || ''}»;`)) return;
+          store.contacts.splice(store.contacts.indexOf(c), 1);
+          markDirty(true);
+        },
+      }, 'Διαγραφή')));
 }
 
 function extraEditor(store, x) {
@@ -581,6 +655,9 @@ function cleanData(data) {
   out.stores = out.stores
     .map((st) => Object.assign(st, {
       name: (st.name || '').trim() || 'Χωρίς όνομα',
+      contacts: (st.contacts || [])
+        .map((c) => Object.assign(c, { name: (c.name || '').trim(), viber: (c.viber || '').trim() }))
+        .filter((c) => c.name && safeViber(c.viber)),
       extras: st.extras
         .map((x) => Object.assign(x, { text: (x.text || '').trim() }))
         .filter((x) => x.text),
@@ -812,8 +889,7 @@ async function init() {
   const last = lsGet(LS.last, {});
   f.date.value = todayISO();
   f.name.value = last.name || '';
-  // Πριν τις 15:00 προτείνεται «Άνοιγμα», μετά «Κλείσιμο».
-  state.section = new Date().getHours() < 15 ? 'opening' : 'closing';
+  state.section = '';
   $('draft-banner').hidden = !state.hasDraft;
 
   f.date.addEventListener('change', renderChecklist);
@@ -829,8 +905,12 @@ async function init() {
   }));
 
   $('btn-share').addEventListener('click', share);
-  $('btn-print').addEventListener('click', () => { renderPrint(); window.print(); });
-  window.addEventListener('beforeprint', renderPrint);
+  $('btn-print').addEventListener('click', () => {
+    if (!SECTIONS[state.section]) { toast('Επίλεξε πρώτα Άνοιγμα ή Κλείσιμο.'); return; }
+    renderPrint();
+    window.print();
+  });
+  window.addEventListener('beforeprint', () => { if (SECTIONS[state.section]) renderPrint(); });
   $('btn-reset').addEventListener('click', () => {
     if (!confirm(`Να σβηστούν όλα τα ✓/✗ και οι σημειώσεις για «${SECTIONS[state.section]}» αυτής της ημέρας;`)) return;
     lsDel(progKey());

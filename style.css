@@ -66,7 +66,18 @@ button, input, select, textarea { font: inherit; color: inherit; }
 
 /* ---------- Πεδία κορυφής ---------- */
 .fields { display: grid; gap: 10px; margin: 16px 0 12px; }
-.fields label { display: grid; gap: 4px; font-size: 14px; color: var(--muted); }
+.fields { max-width: 100%; grid-template-columns: minmax(0, 1fr); }
+.fields label { display: grid; gap: 4px; min-width: 0; font-size: 14px; color: var(--muted); }
+.fields input[type="date"] {
+  -webkit-appearance: none;
+  appearance: none;
+  display: block;
+  min-width: 0;
+  max-width: 100%;
+  width: 100%;
+  text-align: left;
+}
+.fields input[type="date"]::-webkit-date-and-time-value { text-align: left; }
 .fields input, .fields select {
   width: 100%;
   min-height: 44px;
@@ -87,6 +98,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
   background: var(--bg);
   border-bottom: 1px solid var(--line);
 }
+.pick-label { margin: 0 0 6px; font-size: 15px; font-weight: 600; color: var(--brand); }
 .seg { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .seg button {
   min-height: 48px;

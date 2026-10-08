@@ -102,6 +102,7 @@ function normalize(data) {
   data.stores.forEach((st) => {
     if (!st.id) st.id = newId('s');
     st.contacts = Array.isArray(st.contacts) ? st.contacts : [];
+    st.overrides = st.overrides && typeof st.overrides === 'object' && !Array.isArray(st.overrides) ? st.overrides : {};
     st.contacts.forEach((c) => { if (!c.id) c.id = newId('p'); });
     st.extras = Array.isArray(st.extras) ? st.extras : [];
     st.extras.forEach((x) => {
@@ -146,6 +147,7 @@ function buildRows(section, store) {
   const general = state.data.general[section] || [];
   const extras = ((store && store.extras) || []).filter((x) => x.section === section);
   const ids = new Set(general.map((g) => g.id));
+  const overrides = (store && store.overrides) || {};
   const rows = [];
   const pushExtras = (after) => extras
     .filter((x) => x.after === after)
@@ -153,7 +155,15 @@ function buildRows(section, store) {
 
   pushExtras('start');
   general.forEach((g) => {
-    rows.push({ key: g.id, text: g.text, important: !!g.important, notify: !!g.notify });
+    // Προσαρμογή της γενικής γραμμής μόνο για αυτό το κατάστημα.
+    const o = overrides[g.id];
+    rows.push({
+      key: g.id,
+      text: o && o.text ? o.text : g.text,
+      important: !!g.important,
+      notify: !!g.notify,
+      extra: !!(o && o.text && o.highlight),
+    });
     pushExtras(g.id);
   });
   // Αν σβήστηκε η γραμμή αναφοράς, η ιδιαιτερότητα πάει στο τέλος.
@@ -512,7 +522,7 @@ function adminStores() {
   const addStore = () => {
     const name = prompt('Όνομα νέου καταστήματος:');
     if (!name || !name.trim()) return;
-    const st = { id: newId('s'), name: name.trim(), contacts: [], extras: [] };
+    const st = { id: newId('s'), name: name.trim(), overrides: {}, contacts: [], extras: [] };
     stores.push(st);
     state.adminStore = st.id;
     markDirty(true);
@@ -555,6 +565,10 @@ function adminStores() {
         oninput: (e) => { store.name = e.target.value; markDirty(false); },
         onchange: () => renderAdmin(),
       })),
+    h('h2', {}, 'Προσαρμοσμένες γενικές γραμμές'),
+    h('p', { class: 'hint' }, 'Αλλάζει το κείμενο μιας γενικής γραμμής μόνο για αυτό το κατάστημα. Τα άλλα καταστήματα βλέπουν το γενικό κείμενο.'),
+    h('div', { class: 'ed-list' }, Object.keys(store.overrides).map((id) => overrideEditor(store, id))),
+    h('button', { type: 'button', class: 'btn', onclick: () => addOverride(store) }, '+ Προσαρμογή γενικής γραμμής'),
     h('h2', {}, 'Υπεύθυνοι για ενημέρωση (Viber)'),
     h('p', { class: 'hint' }, 'Εμφανίζονται κάτω από κάθε γενική γραμμή που έχει την επιλογή «Επιλογή υπευθύνου (Viber)». Γράψε το κινητό του υπευθύνου, π.χ. 6943554348. Τον σύνδεσμο Viber τον φτιάχνει η εφαρμογή.'),
     h('div', { class: 'ed-list' }, store.contacts.map((c) => contactEditor(store, c))),
@@ -570,6 +584,68 @@ function adminStores() {
       h('button', { type: 'button', class: 'btn', onclick: addExtra }, '+ Προσθήκη ιδιαιτερότητας'),
       h('button', { type: 'button', class: 'btn danger', onclick: delStore }, 'Διαγραφή καταστήματος')),
     saveReminder());
+}
+
+function generalOptions(selectedId) {
+  const opts = [];
+  for (const [sec, label] of Object.entries(SECTIONS)) {
+    state.data.general[sec].forEach((g, i) => opts.push(
+      h('option', { value: g.id }, `${label} ${i + 1}. ${trunc(g.text, 45)}`)));
+  }
+  return opts;
+}
+
+function findGeneral(id) {
+  for (const sec of Object.keys(SECTIONS)) {
+    const g = state.data.general[sec].find((x) => x.id === id);
+    if (g) return g;
+  }
+  return null;
+}
+
+function addOverride(store) {
+  const all = Object.keys(SECTIONS).flatMap((sec) => state.data.general[sec]);
+  const free = all.find((g) => !store.overrides[g.id]);
+  if (!free) { toast('Όλες οι γενικές γραμμές έχουν ήδη προσαρμογή.'); return; }
+  store.overrides[free.id] = { text: free.text };
+  markDirty(true);
+}
+
+function overrideEditor(store, id) {
+  const o = store.overrides[id];
+  const g = findGeneral(id);
+  return h('div', { class: 'ed-row' + (o.highlight ? ' extra' : '') },
+    h('label', { class: 'field' }, 'Γενική γραμμή',
+      h('select', {
+        value: id,
+        onchange: (e) => {
+          const nid = e.target.value;
+          if (store.overrides[nid]) { toast('Αυτή η γραμμή έχει ήδη προσαρμογή.'); renderAdmin(); return; }
+          delete store.overrides[id];
+          store.overrides[nid] = o;
+          markDirty(true);
+        },
+      }, g ? generalOptions(id) : [h('option', { value: id }, '(η γενική γραμμή σβήστηκε)'), ...generalOptions(id)])),
+    g ? h('p', { class: 'hint' }, 'Γενικό κείμενο: ', g.text) : null,
+    h('label', { class: 'field' }, 'Κείμενο για αυτό το κατάστημα',
+      h('textarea', { rows: 3, value: o.text || '', oninput: (e) => { o.text = e.target.value; markDirty(false); } })),
+    h('div', { class: 'ed-tools' },
+      h('label', { class: 'chk notify-chk' },
+        h('input', {
+          type: 'checkbox',
+          checked: !!o.highlight,
+          onchange: (e) => { if (e.target.checked) o.highlight = true; else delete o.highlight; markDirty(true); },
+        }),
+        'Κίτρινη (ιδιαιτερότητα)'),
+      h('button', {
+        type: 'button',
+        class: 'danger',
+        onclick: () => {
+          if (!confirm('Διαγραφή της προσαρμογής; Θα εμφανίζεται ξανά το γενικό κείμενο.')) return;
+          delete store.overrides[id];
+          markDirty(true);
+        },
+      }, 'Διαγραφή')));
 }
 
 function contactEditor(store, c) {
@@ -653,6 +729,10 @@ function defaultSettings() {
 }
 function getSettings() { return Object.assign(defaultSettings(), lsGet(LS.settings, {})); }
 
+function findGeneralIn(data, id) {
+  return Object.keys(SECTIONS).some((sec) => data.general[sec].some((g) => g.id === id));
+}
+
 function cleanData(data) {
   const out = JSON.parse(JSON.stringify(data));
   for (const s of Object.keys(SECTIONS)) {
@@ -663,6 +743,9 @@ function cleanData(data) {
   out.stores = out.stores
     .map((st) => Object.assign(st, {
       name: (st.name || '').trim() || 'Χωρίς όνομα',
+      overrides: Object.fromEntries(Object.entries(st.overrides || {})
+        .filter(([id, o]) => findGeneralIn(out, id) && o && (o.text || '').trim())
+        .map(([id, o]) => [id, o.highlight ? { text: o.text.trim(), highlight: true } : { text: o.text.trim() }])),
       contacts: (st.contacts || [])
         .map((c) => ({ id: c.id, name: (c.name || '').trim(), phone: phoneDigits(c).replace(/^30(?=\d{10}$)/, '') }))
         .filter((c) => c.name && c.phone),

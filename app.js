@@ -98,6 +98,8 @@ function normalize(data) {
     data.general[s] = Array.isArray(data.general[s]) ? data.general[s] : [];
     data.general[s].forEach((it, i) => { if (!it.id) it.id = s[0] + 'n' + i + newId(''); });
   }
+  data.contacts = Array.isArray(data.contacts) ? data.contacts : [];
+  data.contacts.forEach((c) => { if (!c.id) c.id = newId('p'); });
   data.stores = Array.isArray(data.stores) ? data.stores : [];
   data.stores.forEach((st) => {
     if (!st.id) st.id = newId('s');
@@ -275,7 +277,11 @@ function viberLink(c) {
 
 function notifyBox() {
   const store = currentStore();
-  const contacts = ((store && store.contacts) || []).filter((c) => c.name && viberLink(c));
+  // Πρώτα οι υπεύθυνοι του καταστήματος, μετά όσοι ισχύουν για όλα τα καταστήματα.
+  const seen = new Set();
+  const contacts = [...((store && store.contacts) || []), ...state.data.contacts]
+    .filter((c) => c.name && viberLink(c))
+    .filter((c) => { const d = phoneDigits(c); if (seen.has(d)) return false; seen.add(d); return true; });
   if (!contacts.length) return null;
   const link = h('a', { class: 'btn viber', 'aria-disabled': 'true', role: 'button' }, 'Άνοιγμα συνομιλίας στο Viber');
   const sel = h('select', {
@@ -509,6 +515,14 @@ function adminGeneral() {
           h('button', { type: 'button', 'aria-label': 'Κάτω', disabled: i === items.length - 1, onclick: () => move(i, 1) }, '↓'),
           h('button', { type: 'button', class: 'danger', onclick: () => del(i) }, 'Διαγραφή'))))),
     h('button', { type: 'button', class: 'btn', onclick: add }, '+ Προσθήκη γραμμής'),
+    h('h2', {}, 'Υπεύθυνοι για όλα τα καταστήματα (Viber)'),
+    h('p', { class: 'hint' }, 'Εμφανίζονται στη λίστα υπευθύνων κάθε καταστήματος, μετά τους υπευθύνους του ίδιου του καταστήματος.'),
+    h('div', { class: 'ed-list' }, state.data.contacts.map((c) => contactEditor(state.data, c))),
+    h('button', {
+      type: 'button',
+      class: 'btn',
+      onclick: () => { state.data.contacts.push({ id: newId('p'), name: '', phone: '' }); markDirty(true); },
+    }, '+ Προσθήκη υπευθύνου'),
     saveReminder());
 }
 
@@ -729,6 +743,12 @@ function defaultSettings() {
 }
 function getSettings() { return Object.assign(defaultSettings(), lsGet(LS.settings, {})); }
 
+function cleanContacts(list) {
+  return (list || [])
+    .map((c) => ({ id: c.id, name: (c.name || '').trim(), phone: phoneDigits(c).replace(/^30(?=\d{10}$)/, '') }))
+    .filter((c) => c.name && c.phone);
+}
+
 function findGeneralIn(data, id) {
   return Object.keys(SECTIONS).some((sec) => data.general[sec].some((g) => g.id === id));
 }
@@ -740,15 +760,14 @@ function cleanData(data) {
       .map((it) => Object.assign(it, { text: (it.text || '').trim() }))
       .filter((it) => it.text);
   }
+  out.contacts = cleanContacts(out.contacts);
   out.stores = out.stores
     .map((st) => Object.assign(st, {
       name: (st.name || '').trim() || 'Χωρίς όνομα',
       overrides: Object.fromEntries(Object.entries(st.overrides || {})
         .filter(([id, o]) => findGeneralIn(out, id) && o && (o.text || '').trim())
         .map(([id, o]) => [id, o.highlight ? { text: o.text.trim(), highlight: true } : { text: o.text.trim() }])),
-      contacts: (st.contacts || [])
-        .map((c) => ({ id: c.id, name: (c.name || '').trim(), phone: phoneDigits(c).replace(/^30(?=\d{10}$)/, '') }))
-        .filter((c) => c.name && c.phone),
+      contacts: cleanContacts(st.contacts),
       extras: st.extras
         .map((x) => Object.assign(x, { text: (x.text || '').trim() }))
         .filter((x) => x.text),

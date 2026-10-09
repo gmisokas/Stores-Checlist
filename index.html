@@ -12,7 +12,7 @@
   <link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
   <link rel="icon" type="image/png" href="assets/favicon.png">
   <title>Lartecono Stores Checklist</title>
-  <link rel="stylesheet" href="style.css?v=5">
+  <link rel="stylesheet" href="style.css?v=7">
 </head>
 <body>
   <div id="app">
@@ -52,7 +52,7 @@
         <div id="section-seg" class="seg seg3" role="group" aria-label="Ενότητα">
           <button type="button" data-section="opening">Άνοιγμα</button>
           <button type="button" data-section="closing">Κλείσιμο</button>
-          <button type="button" data-section="log">Καθαριότητες / Αποψύξεις</button>
+          <button type="button" data-section="log">ΚΑΘΑΡΙΟΤΗΤΕΣ / ΑΠΟΨΥΞΕΙΣ</button>
         </div>
         <div class="progress">
           <div class="bar"><div id="bar-fill"></div></div>
@@ -72,6 +72,7 @@
 
       <section id="checklist-actions" class="actions">
         <button type="button" id="btn-share" class="btn primary">Αποστολή στο Viber</button>
+        <button type="button" id="btn-archive" class="btn archive" hidden>Αποστολή στο αρχείο</button>
         <button type="button" id="btn-excel" class="btn">Αποθήκευση σε Excel</button>
         <button type="button" id="btn-print" class="btn">Εκτύπωση A4</button>
         <button type="button" id="btn-reset" class="btn ghost">Καθαρισμός</button>
@@ -134,7 +135,7 @@
 
   <div id="toast" class="toast" hidden></div>
 
-  <script src="cleaning.js?v=5"></script>
-  <script src="app.js?v=5"></script>
+  <script src="cleaning.js?v=7"></script>
+  <script src="app.js?v=7"></script>
 </body>
 </html>

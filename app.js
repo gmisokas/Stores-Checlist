@@ -249,7 +249,7 @@ function renderChecklist() {
   $('log-view').hidden = !isLog;
   $('items').replaceChildren(...(chosen
     ? rows.map((r, i) => rowEl(r, i + 1, prog))
-    : [h('li', { class: 'pick-hint' }, 'Επίλεξε «Άνοιγμα», «Κλείσιμο» ή «Καθαριότητες / Αποψύξεις».')]));
+    : [h('li', { class: 'pick-hint' }, 'Επίλεξε «Άνοιγμα», «Κλείσιμο» ή «ΚΑΘΑΡΙΟΤΗΤΕΣ / ΑΠΟΨΥΞΕΙΣ».')]));
   $('legend').hidden = !rows.some((r) => r.extra);
   document.querySelector('#view-checklist .progress').hidden = !chosen;
   $('checklist-actions').hidden = !chosen;
@@ -259,6 +259,7 @@ function renderChecklist() {
   renderLogNotice();
   if (isLog) renderLog();
   updateProgress();
+  updateArchiveBtn();
 }
 
 function rowEl(r, n, prog) {
@@ -405,6 +406,59 @@ async function share() {
   if (s.left && !confirm(`Υπάρχουν ${s.left} γραμμές χωρίς ✓ ή ✗. Να σταλεί έτσι;`)) return;
 
   await shareText(summaryText());
+}
+
+/* ---------- Αποστολή στο αρχείο (κοινό αρχείο Google) ---------- */
+
+function sentKey() { return `cl-sent:${f.store.value}:${f.date.value}:${state.section}`; }
+
+function updateArchiveBtn() {
+  const btn = $('btn-archive');
+  btn.hidden = !shared();
+  if (btn.hidden) return;
+  const sent = SECTIONS[state.section] && f.store.value ? lsGet(sentKey(), '') : '';
+  const pend = sent && pendingOf(f.store.value).some((o) => o.op === 'checklist' && o.c.date === f.date.value && o.c.section === state.section);
+  btn.classList.toggle('sent', !!sent);
+  btn.textContent = !sent ? 'Αποστολή στο αρχείο'
+    : pend ? `⏳ ${sync.oldScript ? 'Περιμένει ενημέρωση του Google Script' : 'Περιμένει σύνδεση για το αρχείο'} – Αποστολή ξανά`
+      : `✓ Στάλθηκε στο αρχείο (${new Date(sent).toTimeString().slice(0, 5)}) – Αποστολή ξανά`;
+}
+
+async function sendToArchive() {
+  if (!SECTIONS[state.section]) { toast('Επίλεξε πρώτα Άνοιγμα ή Κλείσιμο.'); return; }
+  if (!f.store.value) { toast('Επίλεξε πρώτα κατάστημα.'); f.store.focus(); return; }
+  if (!f.name.value.trim()) { toast('Συμπλήρωσε το όνομα του υπευθύνου.'); f.name.focus(); return; }
+  if (!f.date.value) { toast('Συμπλήρωσε την ημερομηνία.'); f.date.focus(); return; }
+  const s = stats();
+  if (s.left && !confirm(`Υπάρχουν ${s.left} γραμμές χωρίς ✓ ή ✗. Να σταλεί έτσι στο αρχείο;`)) return;
+  const sk = f.store.value;
+  const c = {
+    date: f.date.value,
+    section: state.section,
+    by: f.name.value.trim(),
+    ok: s.ok,
+    no: s.no,
+    left: s.left,
+    at: new Date().toISOString(),
+    items: s.rows.map((r, i) => {
+      const p = s.prog[r.key] || {};
+      return { n: i + 1, text: trunc(r.text, 200), s: p.s || '', note: (p.n || '').trim() };
+    }),
+  };
+  // Νέα αποστολή για την ίδια ημέρα/ενότητα αντικαθιστά όποια περιμένει ακόμα.
+  lsSet(LOG_LS.queue, queueGet().filter((o) => !(o.op === 'checklist' && o.store === sk && o.c.date === c.date && o.c.section === c.section)));
+  queueAdd({ op: 'checklist', store: sk, storeName: storeLabel(), c });
+  lsSet(sentKey(), c.at);
+  const btn = $('btn-archive');
+  btn.disabled = true;
+  btn.textContent = 'Αποστολή…';
+  await syncStore(sk);
+  btn.disabled = false;
+  updateArchiveBtn();
+  const waiting = pendingOf(sk).some((o) => o.op === 'checklist' && o.c.date === c.date && o.c.section === c.section);
+  toast(!waiting ? `✓ Το checklist ${SECTIONS[state.section].toLowerCase()} στάλθηκε στο αρχείο.`
+    : sync.oldScript ? 'Το Google Script χρειάζεται ενημέρωση για να δέχεται checklists (Διαχείριση → Καθαριότητες, οδηγίες στο README). Το checklist κρατήθηκε και θα σταλεί μετά.'
+      : 'Δεν υπάρχει σύνδεση: θα σταλεί στο αρχείο μόλις επανέλθει.', waiting ? 8000 : 5000);
 }
 
 // Κοινοποίηση κειμένου (Viber κ.λπ.)· αλλιώς αντιγραφή ή παράθυρο με το κείμενο.
@@ -1255,6 +1309,7 @@ async function init() {
   }));
 
   $('btn-share').addEventListener('click', share);
+  $('btn-archive').addEventListener('click', sendToArchive);
   $('btn-excel').addEventListener('click', exportExcel);
   $('btn-print').addEventListener('click', () => {
     if (!SECTIONS[state.section]) { toast('Επίλεξε πρώτα Άνοιγμα ή Κλείσιμο.'); return; }

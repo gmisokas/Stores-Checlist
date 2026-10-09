@@ -15,6 +15,7 @@ const LOG_TITLES = { clean: 'Αρχείο γενικών καθαριοτήτω�
 const LOG_LS = {
   equip: 'cl-equip:', log: 'cl-log:', seen: 'cl-log-seen:', unlocked: 'cl-log-unlocked',
   queue: 'cl-log-queue', synced: 'cl-log-synced:',
+  draft: 'cl-log-draft:', saved: 'cl-log-saved:',
 };
 // Διεύθυνση της εφαρμογής ιστού του Google Apps Script (…/exec). Το localhost μόνο για δοκιμές.
 const SYNC_URL_RE = /^(https:\/\/script\.google\.com\/(macros|a\/macros\/[^/]+)\/s\/[\w-]+\/exec|http:\/\/(localhost|127\.0\.0\.1)(:\d+)?\/[\w/-]*)$/;
@@ -299,6 +300,7 @@ function mergeStore(sk, res, from, pending) {
 
 function afterSync(sk, changed) {
   updateSyncStatus();
+  updateSaveStatus();
   if (typeof updateArchiveBtn === 'function') updateArchiveBtn();
   if (f.store.value !== sk) return;
   const view = $('log-view');
@@ -537,6 +539,12 @@ function renderLogNotice() {
   const box = $('log-notice');
   box.replaceChildren();
   const sk = f.store.value;
+  const nd = sk ? getDraft(sk).length : 0;
+  if (nd && state.section !== 'log') {
+    box.append(h('div', { class: 'log-remind' },
+      `⚠️ Έχεις ${nd} τικ καθαριοτήτων/αποψύξεων που δεν αποθηκεύτηκαν στο αρχείο. `,
+      h('button', { type: 'button', class: 'linkbtn', onclick: () => { state.section = 'log'; renderChecklist(); } }, 'Προβολή')));
+  }
   if (!sk || !getEquip(sk)) return;
   const today = todayISO();
 
@@ -595,6 +603,7 @@ function renderLog() {
   }
   const setup = getEquip(sk);
   view.replaceChildren(!setup || state.logMode === 'setup' ? setupForm(sk, setup) : logMain(sk, setup));
+  updateSaveStatus();
 }
 
 // Πρώτη φορά σε αυτή τη συσκευή: περιμένουμε το κοινό αρχείο πριν δείξουμε οτιδήποτε.
@@ -663,16 +672,26 @@ function logMain(sk, setup) {
     if (!eq) { toast('Επίλεξε εξοπλισμό ή χώρο.'); selEq.focus(); return; }
     const no = eq.numbered ? parseInt(selNo.value, 10) || 0 : 0;
     if (eq.numbered && !no) { toast('Επίλεξε Νο.'); selNo.focus(); return; }
-    addEntry(sk, type, eq, no);
+    addDraft(sk, type, eq, no);
   };
+  const draft = getDraft(sk);
   const entryCard = h('div', { class: 'box log-entry' },
     h('h2', {}, 'Καταχώρηση – ' + LOG_TYPES[type]),
     h('div', { class: 'log-grid' },
-      h('span', { class: 'log-col' }, '1. Εξοπλισμός / χώρος'),
-      h('span', { class: 'log-col' }, '2. Νο'),
-      selEq, selNo),
-    h('button', { type: 'button', class: 'btn send-log log-tick', onclick: tick }, '✓ Έγινε – Αποστολή στο αρχείο'),
-    h('p', { class: 'hint' }, `Ημερομηνία καταχώρησης: ${fmtDate(date)} · Υπεύθυνος: `, whoEl()));
+      h('span', { class: 'log-col' }, 'Εξοπλισμός / χώρος'),
+      h('span', { class: 'log-col' }, 'Νο'),
+      h('span', { class: 'log-col' }, 'Έγινε'),
+      selEq, selNo,
+      h('button', { type: 'button', class: 'mark ok log-tick', 'aria-label': 'Έγινε', onclick: tick }, '✓')),
+    h('h3', {}, `Προς αποθήκευση (${draft.length})`),
+    draft.length
+      ? h('ul', { class: 'entries draft' }, draft.map((x, i) => h('li', {},
+        h('span', {}, entryLabel(x), h('small', {}, ` · ${LOG_TYPES[x.t]}${x.d !== date ? ' · ' + fmtDate(x.d) : ''}`)),
+        h('button', { type: 'button', class: 'del', 'aria-label': 'Αφαίρεση', onclick: () => removeDraft(sk, i) }, '✕'))))
+      : h('p', { class: 'hint' }, 'Πάτα ✓ σε ό,τι έγινε. Στο τέλος πάτα «Αποθήκευση στο αρχείο».'),
+    h('button', { type: 'button', class: 'btn dark save-log', disabled: !!state.logSaving, onclick: () => saveDraft(sk) }, 'Αποθήκευση στο αρχείο'),
+    h('p', { class: 'save-status log-save-status', hidden: true }),
+    h('p', { class: 'hint' }, `Ημερομηνία: ${fmtDate(date)} · Υπεύθυνος: `, whoEl()));
 
   // Προτεινόμενα για την ημέρα + εκκρεμότητες της ίδιας εβδομάδας/μήνα.
   const todayTasks = tasks.filter((t) => t.day === day);
@@ -685,7 +704,9 @@ function logMain(sk, setup) {
     h('span', { class: 'task-text' }, t.u.label, h('small', {}, ' · ' + freqText(t.u.rule))),
     t.done
       ? h('span', { class: 'done-tag' }, '✓ Έγινε')
-      : h('button', { type: 'button', class: 'btn send-task', 'aria-label': 'Έγινε – αποστολή στο αρχείο', onclick: () => addEntry(sk, type, t.u.eq, t.u.no) }, '✓ Έγινε'));
+      : inDraft(sk, type, t.u.eq.id, t.u.no, date)
+        ? h('span', { class: 'todo-tag' }, '✓ Προς αποθήκευση')
+        : h('button', { type: 'button', class: 'mark ok', 'aria-label': 'Έγινε', onclick: () => addDraft(sk, type, t.u.eq, t.u.no) }, '✓'));
   const isToday = date === today;
   const dow = new Date(date + 'T12:00:00').getDay();
   const planCard = h('div', { class: 'box' },
@@ -783,25 +804,86 @@ async function deleteEntry(sk, e) {
   renderLogNotice();
 }
 
-function addEntry(sk, type, eq, no) {
+/* ---- Τικ «Προς αποθήκευση» και «Αποθήκευση στο αρχείο» ---- */
+
+// Τα τικ μένουν στη συσκευή μέχρι να πατηθεί «Αποθήκευση στο αρχείο» (δεν χάνονται αν κλείσει η σελίδα).
+function getDraft(sk) { return lsGet(LOG_LS.draft + sk, []); }
+function setDraft(sk, list) { if (list.length) lsSet(LOG_LS.draft + sk, list); else lsDel(LOG_LS.draft + sk); }
+function sameUnit(a, t, eq, no, d) { return a.t === t && a.eq === eq && (a.no || 0) === no && a.d === d; }
+function inDraft(sk, t, eq, no, d) { return getDraft(sk).some((x) => sameUnit(x, t, eq, no, d)); }
+
+function addDraft(sk, type, eq, no) {
   const date = f.date.value;
   if (!date) { toast('Συμπλήρωσε την ημερομηνία.'); f.date.focus(); return; }
   if (date > todayISO()) { toast('Δεν γίνεται καταχώρηση για μελλοντική ημερομηνία.'); return; }
+  if (getLog(sk).some((e) => sameUnit(e, type, eq.id, no, date))) { toast('Έχει ήδη αποθηκευτεί για αυτή την ημέρα.'); return; }
+  if (inDraft(sk, type, eq.id, no, date)) { toast('Είναι ήδη στη λίστα «Προς αποθήκευση».'); return; }
+  setDraft(sk, [...getDraft(sk), { t: type, eq: eq.id, no, d: date }]);
+  state.logSel = null;
+  renderLog();
+  renderLogNotice();
+}
+
+function removeDraft(sk, i) {
+  const list = getDraft(sk);
+  list.splice(i, 1);
+  setDraft(sk, list);
+  renderLog();
+  renderLogNotice();
+}
+
+async function saveDraft(sk) {
+  const draft = getDraft(sk);
+  if (!draft.length) { toast('Πάτα πρώτα ✓ σε ό,τι έγινε.'); return; }
   const name = f.name.value.trim();
   if (!name) { toast('Συμπλήρωσε πρώτα το όνομα του υπευθύνου (πάνω).'); f.name.focus(); return; }
   const list = getLog(sk);
-  if (list.some((e) => e.t === type && e.eq === eq.id && (e.no || 0) === no && e.d === date)) {
-    toast('Έχει ήδη καταχωρηθεί για αυτή την ημέρα.');
-    return;
-  }
-  const entry = { id: newId('e'), t: type, eq: eq.id, no, d: date, by: name, at: new Date().toISOString() };
-  list.push(entry);
+  const at = new Date().toISOString();
+  draft.forEach((x) => {
+    if (list.some((e) => sameUnit(e, x.t, x.eq, x.no || 0, x.d))) return;
+    const entry = { id: newId('e'), t: x.t, eq: x.eq, no: x.no || 0, d: x.d, by: name, at };
+    list.push(entry);
+    if (shared()) queueAdd(addOp(sk, entry));
+  });
   setLog(sk, list);
-  state.logSel = null;
-  if (shared()) { queueAdd(addOp(sk, entry)); syncStore(sk); }
-  toast(`✓ ${shared() ? 'Στάλθηκε στο αρχείο' : 'Καταχωρήθηκε'}: ${unitLabel(eq, no)} – ${LOG_TYPES[type]}, ${fmtDate(date)}`);
+  setDraft(sk, []);
+  lsSet(LOG_LS.saved + sk, at);
+  if (shared()) {
+    state.logSaving = true;
+    renderLog();
+    await syncStore(sk);
+    state.logSaving = false;
+  }
   renderLog();
   renderLogNotice();
+}
+
+// Ένδειξη κάτω από το «Αποθήκευση στο αρχείο».
+function saveStatus(sk) {
+  if (state.logSaving) return ['wait', '⏳ Αποστολή…'];
+  if (shared() && pendingOf(sk).some((o) => o.op === 'add')) return ['wait', '⏳ Δεν έγινε ακόμα αποστολή – θα σταλεί μόλις υπάρξει σύνδεση.'];
+  const n = getDraft(sk).length;
+  if (n) return ['warn', `⚠️ ${n === 1 ? '1 τικ δεν έχει' : n + ' τικ δεν έχουν'} αποθηκευτεί ακόμα.`];
+  const at = lsGet(LOG_LS.saved + sk, '');
+  if (at && localISO(new Date(at)) === todayISO()) {
+    return ['ok', `✓ ${shared() ? 'Έγινε αποστολή' : 'Αποθηκεύτηκε'} – ${new Date(at).toTimeString().slice(0, 5)}`];
+  }
+  return null;
+}
+
+function updateSaveStatus() {
+  const st = f.store.value ? saveStatus(f.store.value) : null;
+  document.querySelectorAll('.log-save-status').forEach((el) => {
+    el.hidden = !st;
+    if (st) { el.className = 'save-status log-save-status ' + st[0]; el.textContent = st[1]; }
+  });
+}
+
+// Προειδοποίηση πριν φύγει κάποιος από την οθόνη με τικ που δεν αποθηκεύτηκαν.
+function draftLeaveOk(sk) {
+  const n = sk ? getDraft(sk).length : 0;
+  if (!n) return true;
+  return confirm(`Έχεις ${n} τικ καθαριοτήτων/αποψύξεων που ΔΕΝ αποθηκεύτηκαν στο αρχείο.\n\nΠάτα «Άκυρο» για να γυρίσεις και να πατήσεις «Αποθήκευση στο αρχείο».\nΑν συνεχίσεις, τα τικ μένουν στη λίστα για αργότερα.`);
 }
 
 /* ---- Ημερολόγιο μήνα ---- */

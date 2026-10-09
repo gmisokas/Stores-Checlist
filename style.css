@@ -419,3 +419,4 @@ dialog textarea { width: 100%; }
 .log-wait .box p { margin: 4px 0 10px; }
 .sum-table td.muted { color: var(--muted); font-size: 13px; }
 .sum-table .linkbtn { text-align: left; }
+.btn.link-btn { display: block; margin-top: 10px; text-align: center; text-decoration: none; }

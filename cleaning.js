@@ -1289,6 +1289,7 @@ function adminCleaning() {
       try {
         const r = await apiCall({ action: 'ping' }, url);
         if (r.app !== 'lartecono-log') throw new Error('app');
+        state.syncSheetUrl = /^https:\/\/docs\.google\.com\//.test(r.sheetUrl || '') ? r.sheetUrl : '';
         msg = ['✓ Η σύνδεση λειτουργεί.',
           r.hasPassword ? 'Κωδικός αρχείου: έχει οριστεί.' : 'Κωδικός αρχείου: δεν έχει οριστεί ακόμα (ορίζεται παρακάτω).',
           state.hasDraft ? 'Πάτα «Αποθήκευση για όλους» (καρτέλα Αποθήκευση) για να συνδεθούν όλα τα κινητά.' : ''].filter(Boolean).join('\n');
@@ -1353,6 +1354,7 @@ function adminCleaning() {
       h('label', { class: 'field' }, 'Διεύθυνση εφαρμογής ιστού (τελειώνει σε /exec)', urlIn),
       h('button', { type: 'button', class: 'btn', onclick: testUrl }, 'Δοκιμή σύνδεσης'),
       out,
+      state.syncSheetUrl ? h('a', { class: 'btn link-btn', href: state.syncSheetUrl, target: '_blank', rel: 'noopener' }, 'Άνοιγμα του Google Sheet') : null,
       h('button', { type: 'button', class: 'btn', onclick: copyCode }, 'Αντιγραφή κώδικα Google Script')),
     h('div', { class: 'box' },
       h('h2', {}, 'Κωδικός αρχείου'),

@@ -257,6 +257,8 @@ function syncStore(sk) {
     });
   sync.busy[sk] = p;
   updateSyncStatus();
+  updateSaveStatus();
+  if (typeof updateArchiveBtn === 'function') updateArchiveBtn();
   return p;
 }
 
@@ -683,15 +685,18 @@ function logMain(sk, setup) {
       h('span', { class: 'log-col' }, 'Έγινε'),
       selEq, selNo,
       h('button', { type: 'button', class: 'mark ok log-tick', 'aria-label': 'Έγινε', onclick: tick }, '✓')),
-    h('h3', {}, `Προς αποθήκευση (${draft.length})`),
+    h('p', { class: 'hint' }, `Ημερομηνία: ${fmtDate(date)} · Υπεύθυνος: `, whoEl()));
+
+  // Στο τέλος της σελίδας: τα τικ που περιμένουν και η αποθήκευση στο αρχείο.
+  const saveCard = h('div', { class: 'box log-save' },
+    h('h2', {}, `Προς αποθήκευση (${draft.length})`),
     draft.length
       ? h('ul', { class: 'entries draft' }, draft.map((x, i) => h('li', {},
         h('span', {}, entryLabel(x), h('small', {}, ` · ${LOG_TYPES[x.t]}${x.d !== date ? ' · ' + fmtDate(x.d) : ''}`)),
         h('button', { type: 'button', class: 'del', 'aria-label': 'Αφαίρεση', onclick: () => removeDraft(sk, i) }, '✕'))))
       : h('p', { class: 'hint' }, 'Πάτα ✓ σε ό,τι έγινε. Στο τέλος πάτα «Αποθήκευση στο αρχείο».'),
     h('button', { type: 'button', class: 'btn dark save-log', disabled: !!state.logSaving, onclick: () => saveDraft(sk) }, 'Αποθήκευση στο αρχείο'),
-    h('p', { class: 'save-status log-save-status', hidden: true }),
-    h('p', { class: 'hint' }, `Ημερομηνία: ${fmtDate(date)} · Υπεύθυνος: `, whoEl()));
+    h('p', { class: 'save-status log-save-status', hidden: true }));
 
   // Προτεινόμενα για την ημέρα + εκκρεμότητες της ίδιας εβδομάδας/μήνα.
   const todayTasks = tasks.filter((t) => t.day === day);
@@ -736,7 +741,9 @@ function logMain(sk, setup) {
     planCard,
     entriesCard,
     calendarEl(sk, setup, type),
+    saveCard,
     h('section', { class: 'actions' },
+      h('button', { type: 'button', class: 'btn primary', onclick: () => logViber(sk) }, 'Αποστολή στο Viber'),
       h('button', { type: 'button', class: 'btn', onclick: () => openLogExport(sk, ym, deviceSrc(sk), shared() ? 2 : 13) }, 'Αποθήκευση σε Excel'),
       h('button', { type: 'button', class: 'btn', onclick: () => { state.logMode = 'setup'; renderLog(); scrollToLog(); } }, 'Εξοπλισμός καταστήματος'),
       h('button', { type: 'button', class: 'btn ghost', onclick: () => openArchive() }, '🔒 Αρχείο (με κωδικό)')));
@@ -833,10 +840,23 @@ function removeDraft(sk, i) {
 }
 
 async function saveDraft(sk) {
+  if (!getDraft(sk).length) { toast('Πάτα πρώτα ✓ σε ό,τι έγινε.'); return; }
+  if (!f.name.value.trim()) { toast('Συμπλήρωσε πρώτα το όνομα του υπευθύνου (πάνω).'); f.name.focus(); return; }
+  commitDraft(sk);
+  if (shared()) {
+    state.logSaving = true;
+    renderLog();
+    await syncStore(sk);
+    state.logSaving = false;
+  }
+  renderLog();
+  renderLogNotice();
+}
+
+// Τα τικ γίνονται καταχωρήσεις (και μπαίνουν στην ουρά για το κοινό αρχείο). Χωρίς αναμονή δικτύου.
+function commitDraft(sk) {
   const draft = getDraft(sk);
-  if (!draft.length) { toast('Πάτα πρώτα ✓ σε ό,τι έγινε.'); return; }
   const name = f.name.value.trim();
-  if (!name) { toast('Συμπλήρωσε πρώτα το όνομα του υπευθύνου (πάνω).'); f.name.focus(); return; }
   const list = getLog(sk);
   const at = new Date().toISOString();
   draft.forEach((x) => {
@@ -848,20 +868,52 @@ async function saveDraft(sk) {
   setLog(sk, list);
   setDraft(sk, []);
   lsSet(LOG_LS.saved + sk, at);
-  if (shared()) {
-    state.logSaving = true;
+}
+
+// Viber: πρώτα αποθηκεύονται τα τικ που περιμένουν, μετά ανοίγει η κοινοποίηση με ό,τι έγινε και ό,τι εκκρεμεί σήμερα.
+async function logViber(sk) {
+  if (!f.name.value.trim()) { toast('Συμπλήρωσε πρώτα το όνομα του υπευθύνου (πάνω).'); f.name.focus(); return; }
+  if (getDraft(sk).length) {
+    commitDraft(sk);
+    if (shared()) syncStore(sk);
     renderLog();
-    await syncStore(sk);
-    state.logSaving = false;
+    renderLogNotice();
   }
-  renderLog();
-  renderLogNotice();
+  // Χωρίς αναμονή: το κινητό ανοίγει την κοινοποίηση μόνο αμέσως μετά το πάτημα.
+  await shareText(logSummaryText(sk));
+}
+
+function logSummaryText(sk) {
+  const date = f.date.value || todayISO();
+  const ym = ymOf(date);
+  const day = Number(date.slice(8));
+  const me = f.name.value.trim();
+  const setup = getEquip(sk);
+  const all = getLog(sk);
+  const lines = [`🧽 ΚΑΘΑΡΙΟΤΗΤΕΣ / ΑΠΟΨΥΞΕΙΣ – ${storeLabel()}`, `📅 ${fmtDate(date)} · 👤 ${me || '-'}`];
+  const done = all.filter((e) => e.d === date).sort((a, b) => String(a.at).localeCompare(String(b.at)));
+  lines.push('', '✓ Έγιναν:');
+  if (done.length) done.forEach((e) => lines.push(`• ${entryLabel(e)} – ${LOG_TYPES[e.t]}${e.by && e.by !== me ? ` (${e.by})` : ''}`));
+  else lines.push('• Καμία καταχώρηση');
+  const left = [];
+  if (setup) {
+    const monthEntries = all.filter((e) => ymOf(e.d) === ym);
+    Object.keys(LOG_TYPES).forEach((type) => {
+      markDone(planMonth(ym, type, setup.counts), monthEntries, type, ym)
+        .filter((t) => t.day === day && !t.done)
+        .forEach((t) => left.push(`• ${t.u.label} – ${LOG_TYPES[type]}`));
+    });
+  }
+  if (left.length) lines.push('', '⏳ Προτεινόμενα που δεν έγιναν:', ...left);
+  else if (setup) lines.push('', 'Όλα τα προτεινόμενα της ημέρας έγιναν ✅');
+  return lines.join('\n');
 }
 
 // Ένδειξη κάτω από το «Αποθήκευση στο αρχείο».
 function saveStatus(sk) {
-  if (state.logSaving) return ['wait', '⏳ Αποστολή…'];
-  if (shared() && pendingOf(sk).some((o) => o.op === 'add')) return ['wait', '⏳ Δεν έγινε ακόμα αποστολή – θα σταλεί μόλις υπάρξει σύνδεση.'];
+  const pendAdd = shared() && pendingOf(sk).some((o) => o.op === 'add');
+  if (state.logSaving || (pendAdd && sync.busy[sk])) return ['wait', '⏳ Αποστολή…'];
+  if (pendAdd) return ['wait', '⏳ Δεν έγινε ακόμα αποστολή – θα σταλεί μόλις υπάρξει σύνδεση.'];
   const n = getDraft(sk).length;
   if (n) return ['warn', `⚠️ ${n === 1 ? '1 τικ δεν έχει' : n + ' τικ δεν έχουν'} αποθηκευτεί ακόμα.`];
   const at = lsGet(LOG_LS.saved + sk, '');

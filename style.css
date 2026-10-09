@@ -429,7 +429,7 @@ dialog textarea { width: 100%; }
 .save-status { margin: 0; padding: 8px 12px; border-radius: 8px; font-size: 15px; font-weight: 600; }
 .save-status.ok { background: var(--ok-soft); border: 1px solid var(--ok); color: #1f6b2a; }
 .save-status.wait, .save-status.warn { background: #fff8e1; border: 1px solid var(--extra-line); color: #8a5a00; }
-.log-entry .save-log { display: block; width: 100%; margin-top: 12px; }
-.log-entry .save-status { margin-top: 8px; }
+.log-save .save-log { display: block; width: 100%; margin-top: 12px; }
+.log-save .save-status { margin-top: 8px; }
 .log-entry h3 { margin: 14px 0 4px; }
 .entries.draft li { background: #f6f8fc; }

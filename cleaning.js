@@ -399,9 +399,9 @@ function logWindows(rule, dim) {
 }
 
 // Σταθερές ημέρες εβδομάδας για τις εβδομαδιαίες εργασίες, μοιρασμένες ώστε να μη
-// συγκεντρώνονται όλες την ίδια ημέρα. Οι καθαριότητες μόνο Δευτέρα–Παρασκευή.
-function weeklyDays(units, type) {
-  const days = type === 'clean' ? [1, 2, 3, 4, 5] : [1, 2, 3, 4, 5, 6, 0];
+// συγκεντρώνονται όλες την ίδια ημέρα. Όλες οι ημέρες, και το Σαββατοκύριακο.
+function weeklyDays(units) {
+  const days = [1, 2, 3, 4, 5, 6, 0];
   const load = Object.fromEntries(days.map((d) => [d, 0]));
   const map = {};
   units.filter((u) => u.rule.per !== 'month').forEach((u) => {
@@ -424,8 +424,7 @@ function weeklyDays(units, type) {
 function planMonth(ym, type, counts) {
   const mi = monthInfo(ym);
   const units = logUnits(counts, type);
-  const wk = weeklyDays(units, type);
-  const allowed = (d) => type !== 'clean' || (mi.dow(d) !== 0 && mi.dow(d) !== 6);
+  const wk = weeklyDays(units);
   const load = new Array(mi.dim + 2).fill(0);
   const tasks = [];
 
@@ -442,7 +441,7 @@ function planMonth(ym, type, counts) {
   // Οι μηνιαίες προτείνονται έως 3 ημέρες πριν από το τέλος του μήνα, ώστε να υπάρχει περιθώριο.
   const monthly = units.filter((u) => u.rule.per === 'month');
   const days = [];
-  for (let d = 1; d <= mi.dim - 3; d++) if (allowed(d)) days.push(d);
+  for (let d = 1; d <= mi.dim - 3; d++) days.push(d);
   monthly.forEach((u, j) => {
     const k = Math.min(u.rule.min, days.length);
     const picked = [];
@@ -714,14 +713,11 @@ function logMain(sk, setup) {
         ? h('span', { class: 'todo-tag' }, 'Προς αποθήκευση')
         : null);
   const isToday = date === today;
-  const dow = new Date(date + 'T12:00:00').getDay();
   const planCard = h('div', { class: 'box' },
     h('h2', {}, `Προτεινόμενα για ${isToday ? 'σήμερα' : fmtDate(date)}`),
     todayTasks.length
       ? h('ul', { class: 'tasks' }, todayTasks.map(taskRow))
-      : h('p', { class: 'hint' }, type === 'clean' && (dow === 0 || dow === 6)
-        ? 'Σαββατοκύριακο: δεν προγραμματίζονται γενικές καθαριότητες.'
-        : 'Δεν υπάρχει προτεινόμενη εργασία για αυτή την ημέρα.'),
+      : h('p', { class: 'hint' }, 'Δεν υπάρχει προτεινόμενη εργασία για αυτή την ημέρα.'),
     overdue.length ? [
       h('h3', {}, 'Εκκρεμούν από προηγούμενες ημέρες'),
       h('ul', { class: 'tasks' }, overdue.map(taskRow))] : null);
@@ -974,7 +970,7 @@ function calendarEl(sk, setup, type) {
 
   const selTasks = byDay[sel] || [];
   const units = logUnits(setup.counts, type);
-  const wk = weeklyDays(units, type);
+  const wk = weeklyDays(units);
   const nav = (n) => { state.logCalMonth = addMonths(ym, n); state.logCalDay = null; state.logCalOpen = true; renderLog(); };
 
   const det = h('details', { class: 'box cal', open: !!state.logCalOpen },
@@ -984,7 +980,7 @@ function calendarEl(sk, setup, type) {
       h('b', {}, monthLabel(ym)),
       h('button', { type: 'button', 'aria-label': 'Επόμενος μήνας', onclick: () => nav(1) }, '›')),
     h('div', { class: 'cal-grid' }, cells),
-    h('p', { class: 'hint' }, 'Σε κάθε ημέρα: έγιναν / προτεινόμενα.', type === 'clean' ? ' Οι γενικές καθαριότητες δεν προγραμματίζονται Σάββατο και Κυριακή.' : ''),
+    h('p', { class: 'hint' }, 'Σε κάθε ημέρα: έγιναν / προτεινόμενα.'),
     h('h3', {}, `${DAYS_FULL[mi.dow(sel)]} ${fmtDate(mi.iso(sel))}`),
     selTasks.length
       ? h('ul', { class: 'tasks' }, selTasks.map((t) => h('li', { class: 'task' + (t.done ? ' done' : '') },

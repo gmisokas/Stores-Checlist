@@ -6,6 +6,8 @@
    οθόνη «Διαχείριση», όχι από εδώ.
    ========================================================== */
 
+// Έκδοση της εφαρμογής. Σε κάθε αλλαγή: ίδιος αριθμός εδώ, στο version.json και στα ?v= του index.html.
+const APP_VERSION = '13';
 const SECTIONS = { opening: 'Άνοιγμα', closing: 'Κλείσιμο' };
 const GENERAL_ID = '__general';
 const SECTIONS_UPPER = { opening: 'ΑΝΟΙΓΜΑ', closing: 'ΚΛΕΙΣΙΜΟ' };
@@ -1302,7 +1304,22 @@ function rememberLast() {
   lsSet(LS.last, { store: f.store.value, name: f.name.value });
 }
 
+// Αν το κινητό κράτησε παλιά έκδοση της σελίδας, φορτώνει τη νέα (μία φορά ανά έκδοση).
+async function checkVersion() {
+  try {
+    const r = await fetch('version.json?t=' + Date.now(), { cache: 'no-store' });
+    if (!r.ok) return;
+    const v = String((await r.json()).v || '');
+    if (!v || v === APP_VERSION) return;
+    if (sessionStorage.getItem('cl-reload') === v) return;
+    sessionStorage.setItem('cl-reload', v);
+    location.replace(location.pathname + '?v=' + encodeURIComponent(v) + location.hash);
+  } catch (e) { /* χωρίς σύνδεση: συνεχίζει με ό,τι έχει */ }
+}
+
 async function init() {
+  checkVersion();
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') checkVersion(); });
   f.date = $('f-date');
   f.name = $('f-name');
   f.store = $('f-store');

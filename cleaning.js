@@ -4,14 +4,20 @@
    Αρχείο γενικών καθαριοτήτων / αποψύξεων
    - Εξοπλισμός, συχνότητες και κωδικός αρχείου: data.json
      (Διαχείριση → Καθαριότητες).
-   - Εξοπλισμός κάθε καταστήματος και καταχωρήσεις: σώζονται
-     στη συσκευή.
+   - Εξοπλισμός κάθε καταστήματος και καταχωρήσεις: στη συσκευή και,
+     όταν έχει οριστεί «Κοινό αρχείο», σε Google Sheet (google/Code.gs),
+     ώστε να τα βλέπουν όλα τα κινητά.
    Φορτώνεται πριν από το app.js και χρησιμοποιεί τα βοηθητικά του.
    ========================================================== */
 
 const LOG_TYPES = { clean: 'Γενική καθαριότητα', defrost: 'Απόψυξη' };
 const LOG_TITLES = { clean: 'Αρχείο γενικών καθαριοτήτων', defrost: 'Αρχείο αποψύξεων' };
-const LOG_LS = { equip: 'cl-equip:', log: 'cl-log:', seen: 'cl-log-seen:', unlocked: 'cl-log-unlocked' };
+const LOG_LS = {
+  equip: 'cl-equip:', log: 'cl-log:', seen: 'cl-log-seen:', unlocked: 'cl-log-unlocked',
+  queue: 'cl-log-queue', synced: 'cl-log-synced:',
+};
+// Διεύθυνση της εφαρμογής ιστού του Google Apps Script (…/exec). Το localhost μόνο για δοκιμές.
+const SYNC_URL_RE = /^(https:\/\/script\.google\.com\/(macros|a\/macros\/[^/]+)\/s\/[\w-]+\/exec|http:\/\/(localhost|127\.0\.0\.1)(:\d+)?\/[\w/-]*)$/;
 const REMIND_FROM_DAY = 25;
 const KEEP_MONTHS = 13;
 
@@ -47,6 +53,7 @@ const DEFAULT_EQUIPMENT = [
 function normalizeCleaning(c) {
   c = c && typeof c === 'object' && !Array.isArray(c) ? c : {};
   if (typeof c.passwordHash !== 'string') c.passwordHash = '';
+  if (typeof c.syncUrl !== 'string') c.syncUrl = '';
   if (!Array.isArray(c.equipment)) c.equipment = JSON.parse(JSON.stringify(DEFAULT_EQUIPMENT));
   c.equipment.forEach((eq) => {
     if (!eq.id) eq.id = newId('eq');
@@ -64,6 +71,7 @@ function normalizeCleaning(c) {
 function cleanCleaning(c) {
   return {
     passwordHash: c.passwordHash || '',
+    syncUrl: SYNC_URL_RE.test((c.syncUrl || '').trim()) ? c.syncUrl.trim() : '',
     equipment: c.equipment
       .map((eq) => {
         const o = { id: eq.id, name: (eq.name || '').trim() };
@@ -92,7 +100,7 @@ async function pwHash(pw) {
 /* ---------- Αποθήκευση στη συσκευή ---------- */
 
 function getEquip(sk) { return lsGet(LOG_LS.equip + sk, null); }
-function setEquip(sk, v) { lsSet(LOG_LS.equip + sk, v); }
+function setEquip(sk, v) { if (v) lsSet(LOG_LS.equip + sk, v); else lsDel(LOG_LS.equip + sk); }
 function getLog(sk) { return lsGet(LOG_LS.log + sk, []); }
 function setLog(sk, list) { lsSet(LOG_LS.log + sk, list); }
 
@@ -112,6 +120,188 @@ function cleanupOldLog() {
       if (keep.length !== list.length) setLog(sk, keep);
     }
   } catch (e) { /* τίποτα */ }
+}
+
+/* ---------- Κοινό αρχείο (Google Sheet) ---------- */
+
+const sync = { busy: {}, again: {}, error: {}, at: {}, tried: {} };
+
+function shared() { return SYNC_URL_RE.test(state.data.cleaning.syncUrl || ''); }
+
+function storeNameOf(sk) {
+  if (sk === GENERAL_ID) return 'ΓΕΝΙΚΟ';
+  const st = state.data.stores.find((s) => s.id === sk);
+  if (st) return st.name;
+  const a = state.archive && state.archive.stores[sk];
+  return (a && a.name) || sk;
+}
+
+// Δεδομένα ενός καταστήματος: από τη συσκευή ή, μέσα στο Αρχείο, από το κοινό αρχείο.
+function deviceSrc(sk) { return { equip: getEquip(sk), entries: getLog(sk) }; }
+function archiveSrc(sk) {
+  if (!state.archive) return deviceSrc(sk);
+  const a = state.archive.stores[sk] || {};
+  return { equip: a.equip || null, entries: a.entries || [] };
+}
+
+async function apiCall(payload, url) {
+  url = url || state.data.cleaning.syncUrl;
+  const ctrl = typeof AbortController === 'function' ? new AbortController() : null;
+  const timer = ctrl ? setTimeout(() => ctrl.abort(), 30000) : null;
+  let r;
+  try {
+    // Χωρίς δικές μας κεφαλίδες, ώστε το Google να απαντά απευθείας στον browser.
+    r = await fetch(url, { method: 'POST', body: JSON.stringify(payload), cache: 'no-store', signal: ctrl ? ctrl.signal : undefined });
+  } catch (e) {
+    throw new Error('offline');
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+  if (!r.ok) throw new Error('http-' + r.status);
+  let j;
+  try { j = await r.json(); } catch (e) { throw new Error('bad-response'); }
+  if (!j || j.ok !== true) throw new Error((j && j.error) || 'error');
+  return j;
+}
+
+function apiMsg(e) {
+  const m = String((e && e.message) || e);
+  return {
+    offline: 'Δεν υπάρχει σύνδεση με το κοινό αρχείο. Δοκίμασε ξανά.',
+    password: 'Λάθος κωδικός.',
+    locked: 'Πολλές λάθος προσπάθειες. Δοκίμασε ξανά σε 10 λεπτά.',
+    'no-password': 'Δεν έχει οριστεί κωδικός αρχείου. Ορίζεται στη Διαχείριση → Καθαριότητες.',
+    short: 'Ο κωδικός θέλει τουλάχιστον 4 χαρακτήρες.',
+  }[m] || 'Σφάλμα κοινού αρχείου (' + m + ').';
+}
+
+// Αλλαγές που περιμένουν να σταλούν (π.χ. όταν δεν υπάρχει ίντερνετ).
+function queueGet() { return lsGet(LOG_LS.queue, []); }
+function queueAdd(op) {
+  const q = queueGet();
+  q.push(Object.assign({ qid: newId('q') }, op));
+  lsSet(LOG_LS.queue, q);
+}
+function pendingOf(sk) { return queueGet().filter((o) => o.store === sk); }
+
+function equipSummary(setup) {
+  return state.data.cleaning.equipment
+    .filter((eq) => (parseInt(setup.counts[eq.id], 10) || 0) > 0)
+    .map((eq) => (eq.numbered ? `${eq.name} ×${parseInt(setup.counts[eq.id], 10)}` : eq.name))
+    .join(', ');
+}
+function addOp(sk, e) {
+  const eq = eqById(e.eq);
+  return { op: 'add', store: sk, storeName: storeNameOf(sk), eqName: eq ? eq.name : e.eq, e };
+}
+function equipOp(sk, setup, ifMissing) {
+  return { op: 'equip', store: sk, storeName: storeNameOf(sk), setup, summary: equipSummary(setup), ifMissing: !!ifMissing };
+}
+
+// Από ποια ημερομηνία κρατάμε αντίγραφο στη συσκευή: προηγούμενος μήνας (για την ειδοποίηση) ή ο μήνας της ημερομηνίας.
+function syncFrom() {
+  const prev = addMonths(ymOf(todayISO()), -1);
+  const sel = ymOf(f.date.value || todayISO());
+  return (sel < prev ? sel : prev) + '-01';
+}
+
+function isSynced(sk) { return lsGet(LOG_LS.synced + sk, '') === state.data.cleaning.syncUrl; }
+
+function syncStore(sk) {
+  if (!shared() || !sk) return Promise.resolve();
+  if (sync.busy[sk]) { sync.again[sk] = true; return sync.busy[sk]; }
+  sync.tried[sk] = Date.now();
+  const before = JSON.stringify(deviceSrc(sk));
+  const p = runSync(sk)
+    .then(() => { sync.error[sk] = ''; sync.at[sk] = Date.now(); })
+    .catch((e) => { sync.error[sk] = String((e && e.message) || e); })
+    .then(() => {
+      delete sync.busy[sk];
+      afterSync(sk, JSON.stringify(deviceSrc(sk)) !== before);
+      const again = sync.again[sk] && !sync.error[sk];
+      sync.again[sk] = false;
+      if (again) return syncStore(sk);
+      return undefined;
+    });
+  sync.busy[sk] = p;
+  updateSyncStatus();
+  return p;
+}
+
+async function runSync(sk) {
+  const mine = pendingOf(sk);
+  const ops = [];
+  if (!isSynced(sk)) {
+    // Πρώτη σύνδεση της συσκευής: ό,τι είχε γραφτεί μόνο εδώ ανεβαίνει στο κοινό αρχείο.
+    const local = getEquip(sk);
+    if (local) ops.push(Object.assign({ qid: 'm-equip' }, equipOp(sk, local, true)));
+    getLog(sk).forEach((e) => ops.push(Object.assign({ qid: 'm-' + e.id }, addOp(sk, e))));
+  }
+  ops.push(...mine);
+  const from = syncFrom();
+  const res = await apiCall({ action: 'sync', store: sk, from, ops });
+  const sent = new Set(mine.map((o) => o.qid));
+  const rest = queueGet().filter((o) => !sent.has(o.qid));
+  lsSet(LOG_LS.queue, rest);
+  mergeStore(sk, res, from, rest.filter((o) => o.store === sk));
+  lsSet(LOG_LS.synced + sk, state.data.cleaning.syncUrl);
+  const results = res.results || [];
+  const mineIds = new Set(mine.map((o) => o.qid));
+  if (results.some((x) => mineIds.has(x.qid) && x.reason === 'dup')) toast('Κάποια καταχώρηση είχε ήδη γίνει από άλλη συσκευή.', 5000);
+  if (results.some((x) => mineIds.has(x.qid) && x.reason === 'old')) toast('Χωρίς κωδικό διαγράφονται μόνο καταχωρήσεις της ίδιας ημέρας.', 5000);
+}
+
+// Το κοινό αρχείο είναι το σωστό· κρατάμε από πάνω μόνο ό,τι δεν έχει σταλεί ακόμα.
+function mergeStore(sk, res, from, pending) {
+  const pe = pending.filter((o) => o.op === 'equip').pop();
+  setEquip(sk, pe ? pe.setup : (res.equip || null));
+  const dels = new Set(pending.filter((o) => o.op === 'del').map((o) => o.id));
+  const server = (res.entries || []).filter((e) => !dels.has(e.id));
+  const ids = new Set(server.map((e) => e.id));
+  const adds = pending.filter((o) => o.op === 'add' && !ids.has(o.e.id) && !dels.has(o.e.id)).map((o) => o.e);
+  setLog(sk, [...getLog(sk).filter((e) => e.d < from), ...server, ...adds]);
+}
+
+function afterSync(sk, changed) {
+  updateSyncStatus();
+  if (f.store.value !== sk) return;
+  const view = $('log-view');
+  const waiting = !!view.querySelector('.log-wait');
+  if (changed) renderLogNotice();
+  if (state.section !== 'log' || state.logMode !== 'main') return;
+  // Δεν χαλάμε τη φόρμα πρώτης δήλωσης εξοπλισμού όσο συμπληρώνεται.
+  if (!waiting && view.querySelector('.log-setup') && !getEquip(sk)) return;
+  if (waiting || changed) renderLog();
+}
+
+function syncStatusContent(sk) {
+  const n = pendingOf(sk).length;
+  const wait = n === 1 ? '1 αλλαγή περιμένει να σταλεί' : `${n} αλλαγές περιμένουν να σταλούν`;
+  if (sync.busy[sk]) return ['⏳ Συγχρονισμός με το κοινό αρχείο…'];
+  if (sync.error[sk]) {
+    return [`⚠️ Χωρίς σύνδεση με το κοινό αρχείο${n ? ' · ' + wait : ''}. `,
+      h('button', { type: 'button', class: 'linkbtn', onclick: () => syncStore(sk) }, 'Δοκίμασε ξανά')];
+  }
+  if (n) return [`⏳ ${wait}.`];
+  const t = sync.at[sk] ? new Date(sync.at[sk]).toTimeString().slice(0, 5) : '';
+  return [`☁️ Κοινό αρχείο${t ? ' · ενημερώθηκε ' + t : ''}`];
+}
+
+function updateSyncStatus() {
+  document.querySelectorAll('.log-sync').forEach((el) => el.replaceChildren(...syncStatusContent(f.store.value)));
+}
+
+function initLogSync() {
+  const flush = (force) => {
+    if (!shared()) return;
+    const stores = new Set(queueGet().map((o) => o.store));
+    const sk = f.store.value;
+    if (sk && (force || Date.now() - (sync.tried[sk] || 0) > 30000)) stores.add(sk);
+    stores.forEach((s) => syncStore(s));
+  };
+  window.addEventListener('online', () => flush(true));
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') flush(false); });
+  flush(true);
 }
 
 /* ---------- Ημερομηνίες ---------- */
@@ -138,15 +328,11 @@ function localISO(dt) {
   const p = (n) => String(n).padStart(2, '0');
   return `${dt.getFullYear()}-${p(dt.getMonth() + 1)}-${p(dt.getDate())}`;
 }
-function monthOptions(selected) {
+function monthOptions(selected, count = 13) {
   const now = ymOf(todayISO());
-  const opts = [];
-  for (let i = 0; i <= 12; i++) {
-    const ym = addMonths(now, -i);
-    opts.push(h('option', { value: ym }, monthLabel(ym)));
-  }
-  if (selected && selected > now) opts.unshift(h('option', { value: selected }, monthLabel(selected)));
-  return opts;
+  const list = Array.from({ length: count }, (_, i) => addMonths(now, -i));
+  if (selected && !list.includes(selected)) list.push(selected);
+  return list.sort().reverse().map((ym) => h('option', { value: ym }, monthLabel(ym)));
 }
 
 /* ---------- Πρόγραμμα και έλεγχος ---------- */
@@ -278,10 +464,11 @@ function checkUnits(units, type, entries, ym, since, asOf) {
   return out;
 }
 
-function checkMonth(sk, ym, asOf) {
-  const setup = getEquip(sk);
+// src = { equip, entries } (deviceSrc ή archiveSrc).
+function checkMonth(src, ym, asOf) {
+  const setup = src.equip;
   if (!setup) return [];
-  const entries = getLog(sk).filter((e) => ymOf(e.d) === ym);
+  const entries = src.entries.filter((e) => ymOf(e.d) === ym);
   return Object.keys(LOG_TYPES).flatMap((type) =>
     checkUnits(logUnits(setup.counts, type), type, entries, ym, setup.since || '', asOf));
 }
@@ -321,7 +508,7 @@ function renderLogNotice() {
   const prev = addMonths(ymOf(today), -1);
   const seenKey = LOG_LS.seen + sk + ':' + prev;
   if (!lsGet(seenKey, false)) {
-    const fails = checkMonth(sk, prev, null).filter((x) => !x.ok);
+    const fails = checkMonth(deviceSrc(sk), prev, null).filter((x) => !x.ok);
     if (fails.length) {
       box.append(h('div', { class: 'log-alert' },
         h('div', { class: 'log-alert-title' }, `🔔 Ειδοποίηση – ${monthLabel(prev)}`),
@@ -335,7 +522,7 @@ function renderLogNotice() {
 
   // Από τις 25 του μήνα: υπενθύμιση για ό,τι εκκρεμεί μέχρι το τέλος του μήνα.
   if (state.section !== 'log' && Number(today.slice(8)) >= REMIND_FROM_DAY) {
-    const pend = checkMonth(sk, ymOf(today), today).filter((x) => !x.ok && !x.ended);
+    const pend = checkMonth(deviceSrc(sk), ymOf(today), today).filter((x) => !x.ok && !x.ended);
     const n = pend.reduce((s, x) => s + x.req - x.done, 0);
     if (n) {
       box.append(h('div', { class: 'log-remind' },
@@ -360,13 +547,28 @@ function renderLog() {
     state.logCalMonth = null;
     state.logCalDay = null;
   }
+  if (state.logMode === 'unlock') { view.replaceChildren(unlockForm()); return; }
+  if (state.logMode === 'archive') {
+    view.replaceChildren(shared() && state.archive ? archiveShared() : archiveView(sk, deviceSrc(sk)));
+    return;
+  }
+  if (shared()) {
+    // Ενημέρωση από το κοινό αρχείο (το πολύ κάθε λεπτό όσο είναι ανοιχτή η οθόνη).
+    if (!sync.busy[sk] && Date.now() - (sync.tried[sk] || 0) > 60000) syncStore(sk);
+    if (!isSynced(sk)) { view.replaceChildren(waitBox(sk)); return; }
+  }
   const setup = getEquip(sk);
-  let body;
-  if (!setup || state.logMode === 'setup') body = setupForm(sk, setup);
-  else if (state.logMode === 'unlock') body = unlockForm(sk);
-  else if (state.logMode === 'archive') body = archiveView(sk);
-  else body = logMain(sk, setup);
-  view.replaceChildren(body);
+  view.replaceChildren(!setup || state.logMode === 'setup' ? setupForm(sk, setup) : logMain(sk, setup));
+}
+
+// Πρώτη φορά σε αυτή τη συσκευή: περιμένουμε το κοινό αρχείο πριν δείξουμε οτιδήποτε.
+function waitBox(sk) {
+  const failed = !sync.busy[sk] && sync.error[sk];
+  return h('div', { class: 'log log-wait' }, h('div', { class: 'box' },
+    failed
+      ? [h('p', {}, '⚠️ ' + apiMsg(sync.error[sk])),
+        h('button', { type: 'button', class: 'btn', onclick: () => { syncStore(sk); renderLog(); } }, 'Δοκίμασε ξανά')]
+      : h('p', {}, '⏳ Φόρτωση κοινού αρχείου…')));
 }
 
 function logMain(sk, setup) {
@@ -384,7 +586,7 @@ function logMain(sk, setup) {
   const today = todayISO();
   let remind = null;
   if (ym === ymOf(today) && Number(today.slice(8)) >= REMIND_FROM_DAY) {
-    const pend = checkMonth(sk, ym, today).filter((x) => !x.ok && !x.ended);
+    const pend = checkMonth(deviceSrc(sk), ym, today).filter((x) => !x.ok && !x.ended);
     if (pend.length) {
       remind = h('div', { class: 'log-remind' },
         h('b', {}, '⏰ Υπενθύμιση: μέχρι το τέλος του μήνα εκκρεμούν:'),
@@ -397,10 +599,14 @@ function logMain(sk, setup) {
 
   // Καταχώρηση: εξοπλισμός/χώρος, Νο, τικ.
   const eqs = state.data.cleaning.equipment.filter((eq) => eq[type] && (parseInt(setup.counts[eq.id], 10) || 0) > 0);
-  const selNo = h('select', { 'aria-label': 'Νο' });
-  const selEq = h('select', { 'aria-label': 'Εξοπλισμός / χώρος', onchange: () => fillNo() },
+  // Η επιλογή κρατιέται αν η οθόνη ξαναχτιστεί (π.χ. μετά από συγχρονισμό).
+  const sel = state.logSel && state.logSel.type === type && state.logSel.sk === sk ? state.logSel : { sk, type, eq: '', no: '' };
+  state.logSel = sel;
+  const selNo = h('select', { 'aria-label': 'Νο', onchange: () => { sel.no = selNo.value; } });
+  const selEq = h('select', { 'aria-label': 'Εξοπλισμός / χώρος', onchange: () => { sel.eq = selEq.value; sel.no = ''; fillNo(); } },
     h('option', { value: '' }, '— Επίλεξε —'),
     eqs.map((eq) => h('option', { value: eq.id }, eq.name)));
+  selEq.value = eqs.some((eq) => eq.id === sel.eq) ? sel.eq : '';
   const fillNo = () => {
     const eq = eqs.find((x) => x.id === selEq.value);
     if (eq && eq.numbered) {
@@ -408,7 +614,8 @@ function logMain(sk, setup) {
       selNo.replaceChildren(h('option', { value: '' }, '–'),
         ...Array.from({ length: n }, (_, i) => h('option', { value: String(i + 1) }, String(i + 1))));
       selNo.disabled = false;
-      if (n === 1) selNo.value = '1';
+      selNo.value = sel.no && Number(sel.no) <= n ? sel.no : n === 1 ? '1' : '';
+      sel.no = selNo.value;
     } else {
       selNo.replaceChildren(h('option', { value: '0' }, '—'));
       selNo.disabled = true;
@@ -466,6 +673,7 @@ function logMain(sk, setup) {
       : h('p', { class: 'hint' }, 'Καμία καταχώρηση ακόμα.'));
 
   return h('div', { class: 'log' },
+    shared() ? h('p', { class: 'log-sync' }, syncStatusContent(sk)) : null,
     remind,
     typeSeg,
     entryCard,
@@ -473,7 +681,7 @@ function logMain(sk, setup) {
     entriesCard,
     calendarEl(sk, setup, type),
     h('section', { class: 'actions' },
-      h('button', { type: 'button', class: 'btn', onclick: () => openLogExport(sk, ym) }, 'Αποθήκευση σε Excel'),
+      h('button', { type: 'button', class: 'btn', onclick: () => openLogExport(sk, ym, deviceSrc(sk), shared() ? 2 : 13) }, 'Αποθήκευση σε Excel'),
       h('button', { type: 'button', class: 'btn', onclick: () => { state.logMode = 'setup'; renderLog(); scrollToLog(); } }, 'Εξοπλισμός καταστήματος'),
       h('button', { type: 'button', class: 'btn ghost', onclick: () => openArchive() }, '🔒 Αρχείο (με κωδικό)')));
 }
@@ -507,13 +715,37 @@ function entryRow(sk, e, canDelete, showDate) {
       type: 'button',
       class: 'del',
       'aria-label': 'Διαγραφή',
-      onclick: () => {
-        if (!confirm(`Διαγραφή της καταχώρησης;\n\n${fmtDate(e.d)} · ${LOG_TYPES[e.t]} · ${entryLabel(e)}`)) return;
-        setLog(sk, getLog(sk).filter((x) => x.id !== e.id));
-        renderLog();
-        renderLogNotice();
-      },
+      onclick: () => deleteEntry(sk, e),
     }, '✕') : null);
+}
+
+async function deleteEntry(sk, e) {
+  if (!confirm(`Διαγραφή της καταχώρησης;\n\n${fmtDate(e.d)} · ${LOG_TYPES[e.t]} · ${entryLabel(e)}`)) return;
+  if (state.logMode === 'archive' && shared() && state.archive) {
+    // Από το Αρχείο: διαγραφή στο κοινό αρχείο με τον κωδικό.
+    try {
+      await apiCall({ action: 'remove', pw: state.archivePw, id: e.id });
+      setLog(sk, getLog(sk).filter((x) => x.id !== e.id));
+      await loadArchive(state.archive.month);
+    } catch (x) {
+      toast(apiMsg(x));
+      return;
+    }
+    toast('Η καταχώρηση διαγράφηκε.');
+    renderLog();
+    renderLogNotice();
+    return;
+  }
+  setLog(sk, getLog(sk).filter((x) => x.id !== e.id));
+  if (shared()) {
+    // Αν δεν είχε σταλεί ακόμα, απλώς δεν στέλνεται.
+    const q = queueGet();
+    const i = q.findIndex((o) => o.op === 'add' && o.e.id === e.id);
+    if (i >= 0) { q.splice(i, 1); lsSet(LOG_LS.queue, q); } else queueAdd({ op: 'del', store: sk, id: e.id });
+    syncStore(sk);
+  }
+  renderLog();
+  renderLogNotice();
 }
 
 function addEntry(sk, type, eq, no) {
@@ -527,8 +759,11 @@ function addEntry(sk, type, eq, no) {
     toast('Έχει ήδη καταχωρηθεί για αυτή την ημέρα.');
     return;
   }
-  list.push({ id: newId('e'), t: type, eq: eq.id, no, d: date, by: name, at: new Date().toISOString() });
+  const entry = { id: newId('e'), t: type, eq: eq.id, no, d: date, by: name, at: new Date().toISOString() };
+  list.push(entry);
   setLog(sk, list);
+  state.logSel = null;
+  if (shared()) { queueAdd(addOp(sk, entry)); syncStore(sk); }
   toast(`✓ Καταχωρήθηκε: ${unitLabel(eq, no)} – ${LOG_TYPES[type]}, ${fmtDate(date)}`);
   renderLog();
   renderLogNotice();
@@ -613,7 +848,9 @@ function setupForm(sk, setup) {
     const name = f.name.value.trim();
     if (!name) { toast('Συμπλήρωσε πρώτα το όνομα του υπευθύνου (πάνω).'); f.name.focus(); return; }
     if (editing && !confirm('Να αποθηκευτεί ο νέος εξοπλισμός; Αλλάζει το πρόγραμμα και ο έλεγχος του μήνα.')) return;
-    setEquip(sk, { counts, since: setup && setup.since ? setup.since : todayISO(), by: name, at: new Date().toISOString() });
+    const next = { counts, since: setup && setup.since ? setup.since : todayISO(), by: name, at: new Date().toISOString() };
+    setEquip(sk, next);
+    if (shared()) { queueAdd(equipOp(sk, next, false)); syncStore(sk); }
     state.logMode = 'main';
     renderLog();
     renderLogNotice();
@@ -621,13 +858,13 @@ function setupForm(sk, setup) {
     toast('Ο εξοπλισμός του καταστήματος αποθηκεύτηκε.');
   };
 
-  return h('div', { class: 'log' },
+  return h('div', { class: 'log log-setup' },
     h('div', { class: 'log-warn' },
       h('div', { class: 'log-warn-title' }, '⚠️ Προσοχή!'),
       editing
         ? h('p', {}, 'Αλλαγή εξοπλισμού του καταστήματος. Γίνεται ', h('b', {}, 'μόνο από τον/την υπεύθυνο καταστήματος'), ' και επηρεάζει το πρόγραμμα και τον έλεγχο του μήνα.')
         : [
-          h('p', {}, `Πρώτη χρήση του αρχείου καθαριοτήτων/αποψύξεων για το κατάστημα «${storeLabel()}» σε αυτή τη συσκευή.`),
+          h('p', {}, `Πρώτη χρήση του αρχείου καθαριοτήτων/αποψύξεων για το κατάστημα «${storeLabel()}»${shared() ? '' : ' σε αυτή τη συσκευή'}.`),
           h('p', {}, h('b', {}, 'Ο/Η υπεύθυνος καταστήματος'), ' δηλώνει πρώτα τον εξοπλισμό του καταστήματος. Αν δεν είσαι ο/η υπεύθυνος καταστήματος, μην προχωρήσεις.'),
         ]),
     h('div', { class: 'box' },
@@ -651,12 +888,19 @@ function setupForm(sk, setup) {
     h('p', { class: 'hint' }, 'Υπεύθυνος: ', whoEl()),
     h('div', { class: 'stack' },
       h('button', { type: 'button', class: 'btn dark', onclick: save }, 'Αποθήκευση εξοπλισμού'),
-      editing ? h('button', { type: 'button', class: 'btn ghost', onclick: () => { state.logMode = 'main'; renderLog(); } }, 'Ακύρωση') : null));
+      editing ? h('button', { type: 'button', class: 'btn ghost', onclick: () => { state.logMode = 'main'; renderLog(); } }, 'Ακύρωση') : null,
+      !editing && shared() ? h('button', { type: 'button', class: 'btn ghost', onclick: () => openArchive() }, '🔒 Αρχείο (με κωδικό)') : null));
 }
 
 /* ---- Αρχείο με κωδικό ---- */
 
 function openArchive() {
+  if (shared()) {
+    state.logMode = state.archivePw && state.archive ? 'archive' : 'unlock';
+    renderLog();
+    scrollToLog();
+    return;
+  }
   const hash = state.data.cleaning.passwordHash;
   if (!hash) { toast('Δεν έχει οριστεί κωδικός αρχείου. Ορίζεται στη Διαχείριση → Καθαριότητες.', 6000); return; }
   state.logMode = sessGet(LOG_LS.unlocked) === hash ? 'archive' : 'unlock';
@@ -664,10 +908,46 @@ function openArchive() {
   scrollToLog();
 }
 
+// Κοινό αρχείο: όλα τα καταστήματα για έναν μήνα (ο κωδικός ελέγχεται από το Google).
+async function loadArchive(month, pw) {
+  pw = pw || state.archivePw;
+  const res = await apiCall({ action: 'archive', pw, month });
+  state.archivePw = pw;
+  state.archive = { month: res.month, stores: res.stores || {} };
+  state.logArchiveMonth = res.month;
+}
+
+function lockArchive() {
+  state.archivePw = '';
+  state.archive = null;
+  sessSet(LOG_LS.unlocked, '');
+  state.logMode = 'main';
+  renderLog();
+}
+
 function unlockForm() {
   const pw = h('input', { type: 'password', autocomplete: 'current-password', placeholder: 'Κωδικός' });
+  const btn = h('button', { type: 'submit', class: 'btn dark' }, 'Είσοδος');
   const go = async (e) => {
     e.preventDefault();
+    if (shared()) {
+      btn.disabled = true;
+      btn.textContent = 'Φόρτωση…';
+      try {
+        await loadArchive(state.logArchiveMonth || ymOf(todayISO()), pw.value);
+      } catch (x) {
+        toast(apiMsg(x));
+        btn.disabled = false;
+        btn.textContent = 'Είσοδος';
+        pw.value = '';
+        pw.focus();
+        return;
+      }
+      state.logArchiveStore = state.data.stores.some((s) => s.id === f.store.value) ? f.store.value : '';
+      state.logMode = 'archive';
+      renderLog();
+      return;
+    }
     let hash = '';
     try { hash = await pwHash(pw.value); } catch (x) { toast('Ο έλεγχος κωδικού δεν υποστηρίζεται σε αυτή τη σύνδεση.'); return; }
     if (hash !== state.data.cleaning.passwordHash) { toast('Λάθος κωδικός.'); pw.value = ''; pw.focus(); return; }
@@ -677,9 +957,10 @@ function unlockForm() {
   };
   const form = h('form', { class: 'box', onsubmit: go },
     h('h2', {}, '🔒 Αρχείο καθαριοτήτων/αποψύξεων'),
+    shared() ? h('p', { class: 'hint' }, 'Κοινό αρχείο όλων των καταστημάτων.') : null,
     h('label', { class: 'field' }, 'Κωδικός αρχείου', pw),
     h('div', { class: 'stack' },
-      h('button', { type: 'submit', class: 'btn dark' }, 'Είσοδος'),
+      btn,
       h('button', { type: 'button', class: 'btn ghost', onclick: () => { state.logMode = 'main'; renderLog(); } }, 'Πίσω')));
   setTimeout(() => pw.focus(), 0);
   return h('div', { class: 'log' }, form);
@@ -700,17 +981,76 @@ function unitSummary(rows) {
   return [...map.values()];
 }
 
-function archiveView(sk) {
+async function changeArchiveMonth(ym) {
+  $('log-view').replaceChildren(h('div', { class: 'log' }, h('div', { class: 'box' }, h('p', {}, '⏳ Φόρτωση…'))));
+  try { await loadArchive(ym); } catch (x) { toast(apiMsg(x)); }
+  renderLog();
+}
+
+function archiveShared() {
+  const ym = state.archive.month;
+  const sel = state.logArchiveStore || '';
+  const ids = state.data.stores.map((s) => s.id);
+  const keys = [...ids, ...Object.keys(state.archive.stores).filter((k) => !ids.includes(k))];
+  const head = h('div', { class: 'box' },
+    h('h2', {}, '🔒 Αρχείο καθαριοτήτων/αποψύξεων'),
+    h('label', { class: 'field' }, 'Κατάστημα',
+      h('select', { value: sel, onchange: (e) => { state.logArchiveStore = e.target.value; renderLog(); } },
+        h('option', { value: '' }, 'Όλα τα καταστήματα'),
+        keys.map((k) => h('option', { value: k }, storeNameOf(k))))),
+    h('label', { class: 'field' }, 'Μήνας',
+      h('select', { value: ym, onchange: (e) => changeArchiveMonth(e.target.value) }, monthOptions(ym))));
+  return sel && keys.includes(sel) ? archiveView(sel, archiveSrc(sel), head) : archiveAll(keys, ym, head);
+}
+
+// Όλα τα καταστήματα μαζί: πόσα έγιναν και πόσες ελλείψεις.
+function archiveAll(keys, ym, head) {
   const today = todayISO();
-  const ym = state.logArchiveMonth || ymOf(today);
   const current = ym === ymOf(today);
-  const rows = checkMonth(sk, ym, current ? today : null);
+  const msgs = [];
+  const open = (sk) => h('button', { type: 'button', class: 'linkbtn', onclick: () => { state.logArchiveStore = sk; renderLog(); } }, storeNameOf(sk));
+  const rows = keys.map((sk) => {
+    const src = archiveSrc(sk);
+    if (!src.equip) return h('tr', {}, h('td', {}, open(sk)), h('td', { colspan: 3, class: 'muted' }, 'Δεν έχει δηλωθεί εξοπλισμός'));
+    const res = checkMonth(src, ym, current ? today : null);
+    const part = (type) => {
+      const xs = res.filter((x) => x.type === type);
+      const req = xs.reduce((n, x) => n + x.req, 0);
+      return req ? `${xs.reduce((n, x) => n + Math.min(x.done, x.req), 0)}/${req}` : '—';
+    };
+    const fails = res.filter((x) => !x.ok && x.ended);
+    if (fails.length) msgs.push(noticeText(storeNameOf(sk), ym, fails));
+    return h('tr', { class: fails.length ? 'bad' : '' },
+      h('td', {}, open(sk)),
+      h('td', { class: 'c' }, part('clean')),
+      h('td', { class: 'c' }, part('defrost')),
+      h('td', { class: 'c' }, fails.length ? `✗ ${fails.length}` : '✓'));
+  });
+  return h('div', { class: 'log' },
+    head,
+    h('div', { class: 'box' },
+      h('h2', {}, `Σύνοψη – ${monthLabel(ym)}`),
+      h('p', { class: 'hint' }, 'Έγιναν / απαιτούνται' + (current ? ' (μετράνε οι εβδομάδες που έχουν ξεκινήσει)' : '') + '. «✗» = πόσες φορές δεν έγινε κάτι όπως ορίζεται. Πάτα ένα κατάστημα για λεπτομέρειες.'),
+      h('table', { class: 'sum-table' },
+        h('thead', {}, h('tr', {}, h('th', {}, 'Κατάστημα'), h('th', {}, 'Καθαρ.'), h('th', {}, 'Αποψ.'), h('th', {}, 'Ελλείψεις'))),
+        h('tbody', {}, rows))),
+    h('section', { class: 'actions' },
+      msgs.length ? h('button', { type: 'button', class: 'btn viber', onclick: () => shareText(msgs.join('\n\n')) }, 'Αποστολή ελλείψεων στο Viber') : null,
+      h('button', { type: 'button', class: 'btn ghost', onclick: lockArchive }, 'Κλείδωμα και επιστροφή')));
+}
+
+// Ένα κατάστημα: σύνοψη ανά εξοπλισμό, καταχωρήσεις, Excel. head = επιλογές του κοινού αρχείου.
+function archiveView(sk, src, head) {
+  const today = todayISO();
+  const ym = head ? state.archive.month : state.logArchiveMonth || ymOf(today);
+  const current = ym === ymOf(today);
+  const rows = checkMonth(src, ym, current ? today : null);
   const sum = unitSummary(rows);
-  const entries = getLog(sk).filter((e) => ymOf(e.d) === ym)
+  const entries = src.entries.filter((e) => ymOf(e.d) === ym)
     .sort((a, b) => (b.d + b.at).localeCompare(a.d + a.at));
   const fails = rows.filter((x) => !x.ok && x.ended);
 
-  const setup = getEquip(sk) || { counts: {} };
+  const setup = src.equip || { counts: {} };
   const table = (type) => {
     // Όλες οι μονάδες του καταστήματος, ακόμα κι αν δεν μετράνε ακόμα στον έλεγχο.
     const list = logUnits(setup.counts, type).map((u) => {
@@ -722,18 +1062,22 @@ function archiveView(sk) {
       h('thead', {}, h('tr', {}, h('th', {}, 'Εξοπλισμός / χώρος'), h('th', {}, 'Έγιναν'), h('th', {}, 'Κατάσταση'))),
       h('tbody', {}, list.map((s) => h('tr', { class: s.missed.length ? 'bad' : '' },
         h('td', {}, s.u.label, h('br'), h('small', {}, freqText(s.u.rule))),
-        h('td', { class: 'c' }, `${s.done}/${s.req}`),
+        h('td', { class: 'c' }, s.req ? `${s.done}/${s.req}` : String(s.done)),
         h('td', {}, s.missed.length
           ? '✗ ' + s.missed.map((x) => (x.u.rule.per === 'month' ? 'μήνας' : `${x.a}–${x.b}/${ym.slice(5)}`)).join(', ')
           : s.pending ? '⏳ εκκρεμεί' : s.req ? '✓' : '—')))));
   };
 
   return h('div', { class: 'log' },
-    h('div', { class: 'box' },
-      h('h2', {}, `🔒 Αρχείο – ${storeLabel()}`),
+    head || h('div', { class: 'box' },
+      h('h2', {}, `🔒 Αρχείο – ${storeNameOf(sk)}`),
       h('label', { class: 'field' }, 'Μήνας',
-        h('select', { value: ym, onchange: (e) => { state.logArchiveMonth = e.target.value; renderLog(); } }, monthOptions(ym))),
-      h('p', { class: 'hint' }, `Έγιναν: καταχωρήσεις του μήνα / όσες απαιτούνται. «—» = δεν μετράει ακόμα στον έλεγχο (ο εξοπλισμός δηλώθηκε ${fmtDate(setup.since)}).`),
+        h('select', { value: ym, onchange: (e) => { state.logArchiveMonth = e.target.value; renderLog(); } }, monthOptions(ym)))),
+    h('div', { class: 'box' },
+      head ? h('h2', {}, storeNameOf(sk)) : null,
+      src.equip
+        ? h('p', { class: 'hint' }, `Έγιναν: καταχωρήσεις του μήνα / όσες απαιτούνται. «—» = δεν μετράει ακόμα στον έλεγχο (ο εξοπλισμός δηλώθηκε ${fmtDate(setup.since)}· η πρώτη μισή εβδομάδα δεν μετράει).`)
+        : h('p', { class: 'hint' }, 'Δεν έχει δηλωθεί εξοπλισμός για αυτό το κατάστημα.'),
       current ? h('p', { class: 'hint' }, 'Τρέχων μήνας: μετράνε μόνο οι εβδομάδες που έχουν ξεκινήσει.') : null),
     Object.entries(LOG_TYPES).map(([type, label]) => h('div', { class: 'box' }, h('h2', {}, label), table(type))),
     h('div', { class: 'box' },
@@ -742,39 +1086,38 @@ function archiveView(sk) {
         ? h('ul', { class: 'entries' }, entries.map((e) => entryRow(sk, e, true, true)))
         : h('p', { class: 'hint' }, 'Καμία καταχώρηση αυτόν τον μήνα.')),
     h('section', { class: 'actions' },
-      h('button', { type: 'button', class: 'btn', onclick: () => openLogExport(sk, ym) }, 'Αποθήκευση σε Excel'),
-      fails.length ? h('button', { type: 'button', class: 'btn viber', onclick: () => shareText(noticeText(storeLabel(), ym, fails)) }, 'Αποστολή όσων δεν έγιναν στο Viber') : null,
-      h('button', {
-        type: 'button',
-        class: 'btn ghost',
-        onclick: () => { sessSet(LOG_LS.unlocked, ''); state.logMode = 'main'; renderLog(); },
-      }, 'Κλείδωμα και επιστροφή')));
+      src.equip ? h('button', { type: 'button', class: 'btn', onclick: () => openLogExport(sk, ym, src, head ? 0 : 13) }, 'Αποθήκευση σε Excel') : null,
+      fails.length ? h('button', { type: 'button', class: 'btn viber', onclick: () => shareText(noticeText(storeNameOf(sk), ym, fails)) }, 'Αποστολή όσων δεν έγιναν στο Viber') : null,
+      h('button', { type: 'button', class: 'btn ghost', onclick: lockArchive }, 'Κλείδωμα και επιστροφή')));
 }
 
 /* ---------- Εξαγωγή σε Excel ---------- */
 
-function openLogExport(sk, ymDefault) {
-  const setup = getEquip(sk);
+// months = πόσοι μήνες προς τα πίσω προσφέρονται (0 = μόνο ο μήνας ymDefault).
+function openLogExport(sk, ymDefault, src, months) {
+  const setup = src.equip;
   if (!setup) return;
   const counts = Object.assign({}, setup.counts);
   const all = state.data.cleaning.equipment;
   const dlg = $('log-dialog');
-  const selMonth = h('select', { value: ymDefault }, monthOptions(ymDefault));
+  const selMonth = h('select', { value: ymDefault, disabled: !months },
+    months ? monthOptions(ymDefault, months) : h('option', { value: ymDefault }, monthLabel(ymDefault)));
 
   const download = async () => {
     dlg.close();
     const ym = selMonth.value;
     const blob = xlsxBlob([
-      { name: LOG_TYPES.clean, xml: logSheetXml(sk, ym, 'clean', counts) },
-      { name: LOG_TYPES.defrost, xml: logSheetXml(sk, ym, 'defrost', counts) },
-      { name: 'Καταχωρήσεις', xml: logEntriesXml(sk, ym) },
+      { name: LOG_TYPES.clean, xml: logSheetXml(src, sk, ym, 'clean', counts) },
+      { name: LOG_TYPES.defrost, xml: logSheetXml(src, sk, ym, 'defrost', counts) },
+      { name: 'Καταχωρήσεις', xml: logEntriesXml(src, sk, ym) },
     ]);
-    const store = toLatin(storeLabel() || 'xoris-katastima').replace(/[^A-Za-z0-9-]+/g, '-');
+    const store = toLatin(storeNameOf(sk) || 'xoris-katastima').replace(/[^A-Za-z0-9-]+/g, '-');
     await deliverFile(blob, `kathariotites-apopsyxeis_${store}_${ym}.xlsx`);
   };
 
   $('log-dialog-body').replaceChildren(...[
     h('h2', {}, 'Αποθήκευση σε Excel'),
+    h('p', { class: 'hint' }, storeNameOf(sk)),
     h('label', { class: 'field' }, 'Μήνας', selMonth),
     h('p', { class: 'hint' }, 'Διάλεξε πόσα από το καθένα θα μπουν στο Excel. Οι τιμές έρχονται από τον εξοπλισμό του καταστήματος.'),
     all.filter((eq) => eq.numbered).map((eq) => h('label', { class: 'eq-row' },
@@ -821,10 +1164,10 @@ function sheetRows() {
   };
 }
 
-function logSheetXml(sk, ym, type, counts) {
+function logSheetXml(src, sk, ym, type, counts) {
   const mi = monthInfo(ym);
-  const setup = getEquip(sk) || {};
-  const entries = getLog(sk).filter((e) => ymOf(e.d) === ym && e.t === type);
+  const setup = src.equip || {};
+  const entries = src.entries.filter((e) => ymOf(e.d) === ym && e.t === type);
   const units = logUnits(counts, type);
   const tasks = planMonth(ym, type, counts);
   const sum = unitSummary(checkUnits(units, type, entries, ym, setup.since || '', null));
@@ -833,8 +1176,8 @@ function logSheetXml(sk, ym, type, counts) {
   const we = (d) => mi.dow(d) === 0 || mi.dow(d) === 6;
   const s = sheetRows();
 
-  s.add([[0, `${LOG_TITLES[type]} – ${storeLabel()} – ${monthLabel(ym)}`, XS.title]]);
-  s.add([[0, `Κατάστημα: ${storeLabel()} · Μήνας: ${monthLabel(ym)} · Εξαγωγή: ${fmtDate(todayISO())}`, XS.label]]);
+  s.add([[0, `${LOG_TITLES[type]} – ${storeNameOf(sk)} – ${monthLabel(ym)}`, XS.title]]);
+  s.add([[0, `Κατάστημα: ${storeNameOf(sk)} · Μήνας: ${monthLabel(ym)} · Εξαγωγή: ${fmtDate(todayISO())}`, XS.label]]);
   s.skip();
   const head = [[0, 'Εξοπλισμός / χώρος', XS.head], [1, 'Νο', XS.head], [2, 'Συχνότητα', XS.head]];
   const head2 = [[0, '', XS.head], [1, '', XS.head], [2, '', XS.head]];
@@ -876,11 +1219,11 @@ function logSheetXml(sk, ym, type, counts) {
   return sheetXml(s.rows, cols.join(''), `xSplit="3" ySplit="${headRow}" topLeftCell="D${headRow + 1}" activePane="bottomRight"`, 'landscape');
 }
 
-function logEntriesXml(sk, ym) {
-  const entries = getLog(sk).filter((e) => ymOf(e.d) === ym)
+function logEntriesXml(src, sk, ym) {
+  const entries = src.entries.filter((e) => ymOf(e.d) === ym)
     .sort((a, b) => (a.d + a.at).localeCompare(b.d + b.at));
   const s = sheetRows();
-  s.add([[0, `Καταχωρήσεις καθαριοτήτων/αποψύξεων – ${storeLabel()} – ${monthLabel(ym)}`, XS.title]]);
+  s.add([[0, `Καταχωρήσεις καθαριοτήτων/αποψύξεων – ${storeNameOf(sk)} – ${monthLabel(ym)}`, XS.title]]);
   s.skip();
   s.add([[0, 'Ημερομηνία', XS.head], [1, 'Είδος', XS.head], [2, 'Εξοπλισμός / χώρος', XS.head], [3, 'Νο', XS.head],
     [4, 'Υπεύθυνος', XS.head], [5, 'Ώρα καταχώρησης', XS.head]]);
@@ -902,14 +1245,76 @@ function logEntriesXml(sk, ym) {
 function adminCleaning() {
   const cfg = state.data.cleaning;
   const eqs = cfg.equipment;
+  const isShared = shared();
+  const p0 = h('input', { type: 'password', autocomplete: 'current-password', placeholder: 'Τρέχων κωδικός' });
   const p1 = h('input', { type: 'password', autocomplete: 'new-password', placeholder: 'Νέος κωδικός' });
   const p2 = h('input', { type: 'password', autocomplete: 'new-password', placeholder: 'Ξανά ο νέος κωδικός' });
   const setPw = async () => {
     if (p1.value.length < 4) { toast('Ο κωδικός θέλει τουλάχιστον 4 χαρακτήρες.'); return; }
     if (p1.value !== p2.value) { toast('Οι δύο κωδικοί δεν ταιριάζουν.'); return; }
+    if (isShared) {
+      // Ο κωδικός φυλάσσεται στο Google Script, όχι στο GitHub.
+      try {
+        await apiCall({ action: 'setPassword', pw: p1.value, old: p0.value });
+      } catch (e) {
+        toast(String(e && e.message) === 'password' ? 'Ο τρέχων κωδικός είναι λάθος.' : apiMsg(e), 6000);
+        return;
+      }
+      [p0, p1, p2].forEach((el) => { el.value = ''; });
+      toast('Ο κωδικός ορίστηκε. Ισχύει αμέσως για το Αρχείο σε όλα τα κινητά.', 7000);
+      return;
+    }
     try { cfg.passwordHash = await pwHash(p1.value); } catch (e) { toast('Ο κωδικός δεν ορίστηκε: η σύνδεση δεν είναι ασφαλής (https).'); return; }
     markDirty(true);
     toast('Ο κωδικός ορίστηκε. Πάτα «Αποθήκευση για όλους» για να ισχύσει σε όλα τα κινητά.', 7000);
+  };
+
+  // Κοινό αρχείο (Google Sheet)
+  const urlIn = h('input', {
+    type: 'url',
+    value: cfg.syncUrl || '',
+    placeholder: 'https://script.google.com/macros/s/…/exec',
+    autocomplete: 'off',
+    oninput: (e) => { cfg.syncUrl = e.target.value.trim(); markDirty(false); },
+  });
+  // Το αποτέλεσμα της δοκιμής κρατιέται, γιατί μετά η οθόνη ξαναχτίζεται (αλλάζει και ο τρόπος ορισμού κωδικού).
+  const out = h('pre', { class: 'hint result' }, state.syncTest || '');
+  const testUrl = async () => {
+    const url = urlIn.value.trim();
+    let msg;
+    if (!SYNC_URL_RE.test(url)) {
+      msg = 'Η διεύθυνση δεν είναι σωστή. Πρέπει να αρχίζει με https://script.google.com/ και να τελειώνει σε /exec.';
+    } else {
+      out.textContent = 'Δοκιμή…';
+      try {
+        const r = await apiCall({ action: 'ping' }, url);
+        if (r.app !== 'lartecono-log') throw new Error('app');
+        msg = ['✓ Η σύνδεση λειτουργεί.',
+          r.hasPassword ? 'Κωδικός αρχείου: έχει οριστεί.' : 'Κωδικός αρχείου: δεν έχει οριστεί ακόμα (ορίζεται παρακάτω).',
+          state.hasDraft ? 'Πάτα «Αποθήκευση για όλους» (καρτέλα Αποθήκευση) για να συνδεθούν όλα τα κινητά.' : ''].filter(Boolean).join('\n');
+      } catch (e) {
+        msg = 'Δεν έγινε σύνδεση. Έλεγξε:\n• ότι η διεύθυνση τελειώνει σε /exec\n• ότι στο «Ποιος έχει πρόσβαση» διάλεξες «Οποιοσδήποτε»\n• ότι επικόλλησες όλο τον κώδικα και πάτησες Αποθήκευση πριν την Ανάπτυξη\n• τη σύνδεση στο ίντερνετ';
+      }
+    }
+    state.syncTest = msg;
+    if (state.adminTab === 'cleaning' && !$('view-admin').hidden) renderAdmin();
+  };
+  const copyCode = async () => {
+    let text = '';
+    try {
+      const r = await fetch('google/Code.gs?t=' + Date.now(), { cache: 'no-store' });
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      text = await r.text();
+    } catch (e) {
+      toast('Δεν φορτώθηκε ο κώδικας. Έλεγξε τη σύνδεση.');
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(text);
+      toast('Ο κώδικας αντιγράφηκε. Επικόλλησέ τον στο Apps Script.', 6000);
+    } catch (e) {
+      showTextDialog('Αντίγραψε όλο τον κώδικα και επικόλλησέ τον στο Apps Script:', text);
+    }
   };
   const move = (i, d) => {
     const j = i + d;
@@ -941,11 +1346,23 @@ function adminCleaning() {
 
   return h('div', {},
     h('div', { class: 'box' },
+      h('h2', {}, 'Κοινό αρχείο (Google)'),
+      h('p', { class: 'hint' }, isShared
+        ? '☁️ Συνδεδεμένο: οι καταχωρήσεις όλων των κινητών γράφονται στο Google Sheet σου.'
+        : 'Δεν έχει συνδεθεί: οι καταχωρήσεις μένουν μόνο στη συσκευή όπου γίνονται. Οδηγίες σύνδεσης στο README του repo («Κοινό αρχείο»).'),
+      h('label', { class: 'field' }, 'Διεύθυνση εφαρμογής ιστού (τελειώνει σε /exec)', urlIn),
+      h('button', { type: 'button', class: 'btn', onclick: testUrl }, 'Δοκιμή σύνδεσης'),
+      out,
+      h('button', { type: 'button', class: 'btn', onclick: copyCode }, 'Αντιγραφή κώδικα Google Script')),
+    h('div', { class: 'box' },
       h('h2', {}, 'Κωδικός αρχείου'),
-      h('p', { class: 'hint' }, cfg.passwordHash
-        ? 'Έχει οριστεί κωδικός ✓. Γράψε νέο μόνο αν θέλεις να τον αλλάξεις.'
-        : 'Δεν έχει οριστεί κωδικός. Χωρίς κωδικό το «Αρχείο» δεν ανοίγει.'),
+      isShared
+        ? h('p', { class: 'hint' }, 'Ο κωδικός φυλάσσεται στο Google Script και ισχύει αμέσως για όλους. Την πρώτη φορά άφησε κενό τον «Τρέχοντα κωδικό».')
+        : h('p', { class: 'hint' }, cfg.passwordHash
+          ? 'Έχει οριστεί κωδικός ✓. Γράψε νέο μόνο αν θέλεις να τον αλλάξεις.'
+          : 'Δεν έχει οριστεί κωδικός. Χωρίς κωδικό το «Αρχείο» δεν ανοίγει.'),
       h('p', { class: 'warn' }, 'Μη χρησιμοποιείς κωδικό συναγερμού/POS ή κωδικό που χρησιμοποιείς αλλού.'),
+      isShared ? h('label', { class: 'field' }, 'Τρέχων κωδικός (αν έχει ήδη οριστεί)', p0) : null,
       h('label', { class: 'field' }, 'Νέος κωδικός', p1),
       h('label', { class: 'field' }, 'Επανάληψη', p2),
       h('button', { type: 'button', class: 'btn', onclick: setPw }, 'Ορισμός κωδικού')),

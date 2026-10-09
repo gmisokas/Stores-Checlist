@@ -167,8 +167,13 @@ button, input, select, textarea { font: inherit; color: inherit; }
   font-weight: 700;
   color: var(--muted);
 }
+/* ✓ πάντα πράσινο, ✗ πάντα κόκκινο: περίγραμμα πριν πατηθεί, γεμάτο μετά. */
+.mark.ok { border-color: var(--ok); color: var(--ok); }
+.mark.no { border-color: var(--no); color: var(--no); }
 .mark.ok[aria-pressed="true"] { background: var(--ok); border-color: var(--ok); color: #fff; }
 .mark.no[aria-pressed="true"] { background: var(--no); border-color: var(--no); color: #fff; }
+/* Το ✓ των καθαριοτήτων είναι κουμπί «πρόσθεσε»: πάντα γεμάτο πράσινο. */
+.mark.log-tick { background: var(--ok); border-color: var(--ok); color: #fff; }
 
 .note-btn {
   margin-left: auto;
@@ -359,7 +364,6 @@ dialog textarea { width: 100%; }
 .task.done { border-color: var(--ok); background: var(--ok-soft); }
 .task-text { flex: 1; }
 .task-text small, .entries small, .plan-list small, .sum-table small { color: var(--muted); }
-.task .mark { flex: none; width: 52px; height: 40px; color: var(--ok); border-color: var(--ok); }
 .done-tag { flex: none; color: var(--ok); font-weight: 700; font-size: 14px; }
 .todo-tag { flex: none; color: var(--muted); }
 .entries li { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 10px; background: #fff; font-size: 15px; }

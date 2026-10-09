@@ -522,5 +522,188 @@
         }
       ]
     }
-  ]
+  ],
+  "cleaning": {
+    "passwordHash": "",
+    "equipment": [
+      {
+        "id": "katapsyxi",
+        "name": "Κατάψυξη",
+        "numbered": true,
+        "clean": {
+          "min": 1,
+          "per": "week"
+        },
+        "defrost": {
+          "min": 1,
+          "max": 2,
+          "per": "week"
+        }
+      },
+      {
+        "id": "semifreddo",
+        "name": "Κατάψυξη semifreddo",
+        "numbered": true,
+        "clean": {
+          "min": 2,
+          "per": "month"
+        },
+        "defrost": {
+          "min": 1,
+          "per": "month"
+        }
+      },
+      {
+        "id": "katapsyxi-pagkos",
+        "name": "Κατάψυξη πάγκος",
+        "numbered": true,
+        "clean": {
+          "min": 2,
+          "per": "month"
+        },
+        "defrost": {
+          "min": 1,
+          "per": "month"
+        }
+      },
+      {
+        "id": "vouta",
+        "name": "Κατάψυξη βούτα",
+        "numbered": true,
+        "clean": {
+          "min": 2,
+          "per": "month"
+        },
+        "defrost": {
+          "min": 1,
+          "per": "month"
+        }
+      },
+      {
+        "id": "vitrina",
+        "name": "Βιτρίνα παγωτού",
+        "numbered": true,
+        "clean": {
+          "min": 1,
+          "per": "week"
+        },
+        "defrost": {
+          "min": 2,
+          "max": 3,
+          "per": "week"
+        }
+      },
+      {
+        "id": "psygeio-stili",
+        "name": "Ψυγείο στήλη",
+        "numbered": true,
+        "clean": {
+          "min": 2,
+          "per": "month"
+        },
+        "defrost": {
+          "min": 1,
+          "per": "month"
+        }
+      },
+      {
+        "id": "psygeio-pagkos",
+        "name": "Ψυγείο πάγκος",
+        "numbered": true,
+        "clean": {
+          "min": 1,
+          "per": "week"
+        },
+        "defrost": {
+          "min": 1,
+          "per": "month"
+        }
+      },
+      {
+        "id": "psygeio-anapsyktikon",
+        "name": "Ψυγείο αναψυκτικών",
+        "numbered": true,
+        "clean": {
+          "min": 1,
+          "per": "month"
+        },
+        "defrost": {
+          "min": 1,
+          "per": "month"
+        }
+      },
+      {
+        "id": "santigiera",
+        "name": "Σαντιγιέρα",
+        "clean": {
+          "min": 2,
+          "per": "week"
+        }
+      },
+      {
+        "id": "ben-mari",
+        "name": "Μπεν μαρί",
+        "clean": {
+          "min": 1,
+          "per": "week"
+        }
+      },
+      {
+        "id": "sokolatovrysi",
+        "name": "Σοκολατοβρύση",
+        "clean": {
+          "min": 2,
+          "per": "month"
+        }
+      },
+      {
+        "id": "fournos",
+        "name": "Φούρνος μικροκυμάτων",
+        "clean": {
+          "min": 1,
+          "per": "month"
+        }
+      },
+      {
+        "id": "ntoulapia",
+        "name": "Αποθηκευτικοί χώροι/ντουλάπια/ράφια",
+        "clean": {
+          "min": 1,
+          "per": "week"
+        }
+      },
+      {
+        "id": "apothiki",
+        "name": "Αποθήκη",
+        "clean": {
+          "min": 1,
+          "per": "week"
+        }
+      },
+      {
+        "id": "toixoi",
+        "name": "Τοίχοι",
+        "clean": {
+          "min": 1,
+          "per": "month"
+        }
+      },
+      {
+        "id": "portes",
+        "name": "Πόρτες",
+        "clean": {
+          "min": 1,
+          "per": "week"
+        }
+      },
+      {
+        "id": "pezodromio",
+        "name": "Πεζοδρόμιο",
+        "clean": {
+          "min": 1,
+          "per": "week"
+        }
+      }
+    ]
+  }
 }

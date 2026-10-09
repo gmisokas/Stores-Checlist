@@ -114,6 +114,8 @@ button, input, select, textarea { font: inherit; color: inherit; }
 #view-checklist .seg button[data-section="closing"] { border-color: var(--no); color: var(--no); }
 #view-checklist .seg button[data-section="opening"][aria-pressed="true"] { background: var(--ok); color: #fff; }
 #view-checklist .seg button[data-section="closing"][aria-pressed="true"] { background: var(--no); color: #fff; }
+.seg3 { grid-template-columns: 1fr 1fr 1.25fr; }
+.seg3 button[data-section="log"] { padding: 2px 4px; font-size: 14px; line-height: 1.15; }
 
 .progress { margin-top: 10px; }
 .bar { height: 8px; background: var(--line); border-radius: 4px; overflow: hidden; }
@@ -216,7 +218,8 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .admin-head h1 { margin: 6px 0 0; font-size: 22px; }
 .back { color: var(--brand); font-size: 14px; }
 
-.tabs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-bottom: 14px; }
+.tabs { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; margin-bottom: 14px; }
+@media (max-width: 520px) { .tabs { grid-template-columns: 1fr 1fr; } }
 .tabs button {
   min-height: 42px;
   padding: 4px;
@@ -336,3 +339,77 @@ dialog textarea { width: 100%; }
 .btn.viber[aria-disabled="true"] { opacity: .45; pointer-events: none; }
 .notify-chk { color: var(--brand); }
 @media print { .notify { display: none; } }
+
+/* ---------- Αρχείο καθαριοτήτων / αποψύξεων ---------- */
+.log { display: grid; gap: 12px; margin: 12px 0; }
+.log .box { margin: 0; }
+.log .box h3 { margin: 12px 0 6px; font-size: 15px; color: var(--brand); }
+.log .actions { margin-top: 4px; }
+.log-type button { font-size: 15px; }
+
+.log-grid { display: grid; grid-template-columns: minmax(0, 1fr) 64px 56px; gap: 6px 8px; align-items: center; margin-top: 8px; }
+.log-col { font-size: 13px; color: var(--muted); }
+.log-grid select { width: 100%; min-height: 44px; padding: 8px; border: 1px solid var(--line); border-radius: 8px; background: #fff; color: var(--text); }
+.log-grid select:disabled { background: var(--bg); }
+.log-tick { color: var(--ok); border-color: var(--ok); }
+
+.tasks, .entries, .plan-list { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 6px; }
+.task { display: flex; align-items: center; gap: 8px; padding: 6px 8px 6px 12px; border: 1px solid var(--line); border-radius: 10px; background: #fff; }
+.task.done { border-color: var(--ok); background: var(--ok-soft); }
+.task-text { flex: 1; }
+.task-text small, .entries small, .plan-list small, .sum-table small { color: var(--muted); }
+.task .mark { flex: none; width: 52px; height: 40px; color: var(--ok); border-color: var(--ok); }
+.done-tag { flex: none; color: var(--ok); font-weight: 700; font-size: 14px; }
+.todo-tag { flex: none; color: var(--muted); }
+.entries li { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 10px; background: #fff; font-size: 15px; }
+.entries li > span { flex: 1; }
+.del { flex: none; width: 36px; height: 36px; border: 1px solid var(--no); border-radius: 8px; background: #fff; color: var(--no); }
+.plan-list li { padding: 6px 10px; border-left: 3px solid var(--brand-soft); font-size: 15px; }
+
+.cal summary { cursor: pointer; font-weight: 700; font-size: 17px; }
+.cal-nav { display: flex; align-items: center; justify-content: space-between; margin: 10px 0 8px; }
+.cal-nav button { width: 44px; height: 40px; border: 1px solid var(--line); border-radius: 8px; background: #fff; font-size: 22px; }
+.cal-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; }
+.cal-h { text-align: center; font-size: 12px; color: var(--muted); }
+.cal-day { display: grid; place-items: center; align-content: center; min-height: 48px; padding: 2px; border: 1px solid var(--line); border-radius: 8px; background: #fff; }
+.cal-day.we { background: #f3f4f8; }
+.cal-day.all-done { background: var(--ok-soft); border-color: var(--ok); }
+.cal-day.missed { background: var(--no-soft); border-color: var(--no); }
+.cal-day.today { box-shadow: inset 0 0 0 2px var(--brand); }
+.cal-day.sel { background: var(--brand); border-color: var(--brand); color: #fff; }
+.cal-day.sel .cal-c { color: #fff; }
+.cal-n { font-weight: 700; font-size: 15px; line-height: 1.1; }
+.cal-c { font-size: 11px; color: var(--muted); }
+
+.log-warn { padding: 12px 14px; background: #fff8e1; border: 2px solid var(--extra-line); border-radius: 12px; }
+.log-warn p { margin: 6px 0 0; }
+.log-warn-title { font-size: 19px; font-weight: 800; color: #8a5a00; }
+.log-alert { margin: 0 0 12px; padding: 12px 14px; background: var(--no-soft); border: 2px solid var(--no); border-radius: 12px; }
+.log-alert p { margin: 6px 0; }
+.log-alert-title { font-size: 17px; font-weight: 800; color: var(--important); }
+.log-alert .stack { margin-top: 10px; }
+.log-remind { margin: 0 0 12px; padding: 10px 12px; background: #fff8e1; border: 1px solid var(--extra-line); border-radius: 10px; font-size: 15px; }
+.log .log-remind { margin: 0; }
+.linkbtn { padding: 0; border: 0; background: none; color: var(--brand); font-weight: 700; text-decoration: underline; }
+.fail-list { max-height: 240px; overflow: auto; font-size: 14px; }
+.fail-list ul { margin: 4px 0 8px; padding-left: 20px; }
+.fail-type { margin-top: 6px; font-weight: 700; }
+
+.eq-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 6px 0; border-bottom: 1px solid var(--line); font-size: 15px; }
+.eq-row select { flex: none; width: 76px; min-height: 40px; padding: 6px; border: 1px solid var(--line); border-radius: 8px; background: #fff; color: var(--text); }
+
+.rule-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 8px 0; font-size: 14px; color: var(--muted); }
+.rule-label { flex-basis: 100%; font-weight: 600; color: var(--text); }
+.rule-row .num-in { width: 60px; min-height: 40px; padding: 6px; border: 1px solid var(--line); border-radius: 8px; background: #fff; color: var(--text); }
+.rule-row select { width: auto; min-height: 40px; padding: 6px; border: 1px solid var(--line); border-radius: 8px; background: #fff; color: var(--text); }
+
+.sum-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.sum-table th, .sum-table td { padding: 6px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+.sum-table th { color: var(--muted); font-weight: 600; }
+.sum-table .c { text-align: center; white-space: nowrap; }
+.sum-table tr.bad td { color: var(--important); }
+
+#log-dialog { max-height: calc(100% - 32px); }
+#log-dialog h2 { margin-bottom: 8px; }
+#log-dialog .stack { margin-top: 14px; }
+#log-dialog .field select { width: 100%; min-height: 44px; padding: 8px; border: 1px solid var(--line); border-radius: 8px; background: #fff; }

@@ -124,7 +124,7 @@ function cleanupOldLog() {
 
 /* ---------- Κοινό αρχείο (Google Sheet) ---------- */
 
-const sync = { busy: {}, again: {}, error: {}, at: {}, tried: {} };
+const sync = { busy: {}, again: {}, error: {}, at: {}, tried: {}, oldScript: false };
 
 function shared() { return SYNC_URL_RE.test(state.data.cleaning.syncUrl || ''); }
 
@@ -141,7 +141,38 @@ function deviceSrc(sk) { return { equip: getEquip(sk), entries: getLog(sk) }; }
 function archiveSrc(sk) {
   if (!state.archive) return deviceSrc(sk);
   const a = state.archive.stores[sk] || {};
-  return { equip: a.equip || null, entries: a.entries || [] };
+  return { equip: a.equip || null, entries: a.entries || [], checklists: a.checklists || [] };
+}
+
+// Checklists ανοίγματος/κλεισίματος που στάλθηκαν στο αρχείο: σε πόσες ημέρες του μήνα.
+function checklistDays(src, ym) {
+  const today = todayISO();
+  const days = ym === ymOf(today) ? Number(today.slice(8)) : monthInfo(ym).dim;
+  const count = (sec) => new Set((src.checklists || []).filter((c) => c.section === sec).map((c) => c.d)).size;
+  return { days, opening: count('opening'), closing: count('closing') };
+}
+
+function checklistTable(src, ym) {
+  const mi = monthInfo(ym);
+  const { days } = checklistDays(src, ym);
+  const by = {};
+  (src.checklists || []).forEach((c) => { by[c.d + c.section] = c; });
+  const cell = (d, sec) => {
+    const c = by[mi.iso(d) + sec];
+    if (!c) return h('td', { class: 'c miss' }, '—');
+    const label = `✓${c.ok}${c.no ? ' ✗' + c.no : ''}${c.left ? ' ⏳' + c.left : ''}`;
+    const info = [`${SECTIONS[sec]} – ${fmtDate(c.d)}`, `Υπεύθυνος: ${c.by || '-'}`, `✓ ${c.ok} · ✗ ${c.no} · χωρίς συμπλήρωση ${c.left}`,
+      c.notDone ? '\nΔεν έγιναν:\n' + c.notDone : '', c.notes ? '\nΣημειώσεις:\n' + c.notes : ''].filter(Boolean).join('\n');
+    return h('td', { class: 'c' + (c.no || c.left ? ' warn-c' : '') },
+      h('button', { type: 'button', class: 'linkbtn', onclick: () => showTextDialog('Checklist στο αρχείο:', info) }, label));
+  };
+  const rows = [];
+  for (let d = days; d >= 1; d--) {
+    rows.push(h('tr', {}, h('td', {}, `${DAYS_SHORT[mi.dow(d)]} ${fmtDate(mi.iso(d)).slice(0, 5)}`), cell(d, 'opening'), cell(d, 'closing')));
+  }
+  return h('table', { class: 'sum-table' },
+    h('thead', {}, h('tr', {}, h('th', {}, 'Ημέρα'), h('th', {}, 'Άνοιγμα'), h('th', {}, 'Κλείσιμο'))),
+    h('tbody', {}, rows));
 }
 
 async function apiCall(payload, url) {
@@ -240,7 +271,11 @@ async function runSync(sk) {
   ops.push(...mine);
   const from = syncFrom();
   const res = await apiCall({ action: 'sync', store: sk, from, ops });
-  const sent = new Set(mine.map((o) => o.qid));
+  // Παλιά έκδοση του Google Script που δεν ξέρει τα checklists: τα κρατάμε για αργότερα.
+  const kept = new Set((res.results || []).filter((x) => x.reason === 'bad').map((x) => x.qid)
+    .filter((q) => mine.some((o) => o.qid === q && o.op === 'checklist')));
+  sync.oldScript = kept.size > 0;
+  const sent = new Set(mine.filter((o) => !kept.has(o.qid)).map((o) => o.qid));
   const rest = queueGet().filter((o) => !sent.has(o.qid));
   lsSet(LOG_LS.queue, rest);
   mergeStore(sk, res, from, rest.filter((o) => o.store === sk));
@@ -264,6 +299,7 @@ function mergeStore(sk, res, from, pending) {
 
 function afterSync(sk, changed) {
   updateSyncStatus();
+  if (typeof updateArchiveBtn === 'function') updateArchiveBtn();
   if (f.store.value !== sk) return;
   const view = $('log-view');
   const waiting = !!view.querySelector('.log-wait');
@@ -632,11 +668,10 @@ function logMain(sk, setup) {
   const entryCard = h('div', { class: 'box log-entry' },
     h('h2', {}, 'Καταχώρηση – ' + LOG_TYPES[type]),
     h('div', { class: 'log-grid' },
-      h('span', { class: 'log-col' }, 'Εξοπλισμός / χώρος'),
-      h('span', { class: 'log-col' }, 'Νο'),
-      h('span', { class: 'log-col' }, 'Έγινε'),
-      selEq, selNo,
-      h('button', { type: 'button', class: 'mark ok log-tick', 'aria-label': 'Έγινε', onclick: tick }, '✓')),
+      h('span', { class: 'log-col' }, '1. Εξοπλισμός / χώρος'),
+      h('span', { class: 'log-col' }, '2. Νο'),
+      selEq, selNo),
+    h('button', { type: 'button', class: 'btn send-log log-tick', onclick: tick }, '✓ Έγινε – Αποστολή στο αρχείο'),
     h('p', { class: 'hint' }, `Ημερομηνία καταχώρησης: ${fmtDate(date)} · Υπεύθυνος: `, whoEl()));
 
   // Προτεινόμενα για την ημέρα + εκκρεμότητες της ίδιας εβδομάδας/μήνα.
@@ -650,7 +685,7 @@ function logMain(sk, setup) {
     h('span', { class: 'task-text' }, t.u.label, h('small', {}, ' · ' + freqText(t.u.rule))),
     t.done
       ? h('span', { class: 'done-tag' }, '✓ Έγινε')
-      : h('button', { type: 'button', class: 'mark ok', 'aria-label': 'Έγινε', onclick: () => addEntry(sk, type, t.u.eq, t.u.no) }, '✓'));
+      : h('button', { type: 'button', class: 'btn send-task', 'aria-label': 'Έγινε – αποστολή στο αρχείο', onclick: () => addEntry(sk, type, t.u.eq, t.u.no) }, '✓ Έγινε'));
   const isToday = date === today;
   const dow = new Date(date + 'T12:00:00').getDay();
   const planCard = h('div', { class: 'box' },
@@ -764,7 +799,7 @@ function addEntry(sk, type, eq, no) {
   setLog(sk, list);
   state.logSel = null;
   if (shared()) { queueAdd(addOp(sk, entry)); syncStore(sk); }
-  toast(`✓ Καταχωρήθηκε: ${unitLabel(eq, no)} – ${LOG_TYPES[type]}, ${fmtDate(date)}`);
+  toast(`✓ ${shared() ? 'Στάλθηκε στο αρχείο' : 'Καταχωρήθηκε'}: ${unitLabel(eq, no)} – ${LOG_TYPES[type]}, ${fmtDate(date)}`);
   renderLog();
   renderLogNotice();
 }
@@ -1011,7 +1046,9 @@ function archiveAll(keys, ym, head) {
   const open = (sk) => h('button', { type: 'button', class: 'linkbtn', onclick: () => { state.logArchiveStore = sk; renderLog(); } }, storeNameOf(sk));
   const rows = keys.map((sk) => {
     const src = archiveSrc(sk);
-    if (!src.equip) return h('tr', {}, h('td', {}, open(sk)), h('td', { colspan: 3, class: 'muted' }, 'Δεν έχει δηλωθεί εξοπλισμός'));
+    const cd = checklistDays(src, ym);
+    const first = h('td', {}, open(sk), h('br'), h('small', {}, `Checklists: Άν. ${cd.opening}/${cd.days} · Κλ. ${cd.closing}/${cd.days}`));
+    if (!src.equip) return h('tr', {}, first, h('td', { colspan: 3, class: 'muted' }, 'Δεν έχει δηλωθεί εξοπλισμός'));
     const res = checkMonth(src, ym, current ? today : null);
     const part = (type) => {
       const xs = res.filter((x) => x.type === type);
@@ -1021,7 +1058,7 @@ function archiveAll(keys, ym, head) {
     const fails = res.filter((x) => !x.ok && x.ended);
     if (fails.length) msgs.push(noticeText(storeNameOf(sk), ym, fails));
     return h('tr', { class: fails.length ? 'bad' : '' },
-      h('td', {}, open(sk)),
+      first,
       h('td', { class: 'c' }, part('clean')),
       h('td', { class: 'c' }, part('defrost')),
       h('td', { class: 'c' }, fails.length ? `✗ ${fails.length}` : '✓'));
@@ -1080,6 +1117,10 @@ function archiveView(sk, src, head) {
         : h('p', { class: 'hint' }, 'Δεν έχει δηλωθεί εξοπλισμός για αυτό το κατάστημα.'),
       current ? h('p', { class: 'hint' }, 'Τρέχων μήνας: μετράνε μόνο οι εβδομάδες που έχουν ξεκινήσει.') : null),
     Object.entries(LOG_TYPES).map(([type, label]) => h('div', { class: 'box' }, h('h2', {}, label), table(type))),
+    head ? h('div', { class: 'box' },
+      h('h2', {}, 'Checklists ανοίγματος / κλεισίματος'),
+      h('p', { class: 'hint' }, 'Όσα στάλθηκαν στο αρχείο. «—» = δεν στάλθηκε. Πάτα μια ημέρα για λεπτομέρειες.'),
+      checklistTable(src, ym)) : null,
     h('div', { class: 'box' },
       h('h2', {}, `Καταχωρήσεις (${entries.length})`),
       entries.length

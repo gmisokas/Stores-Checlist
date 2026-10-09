@@ -347,11 +347,14 @@ dialog textarea { width: 100%; }
 .log .actions { margin-top: 4px; }
 .log-type button { font-size: 15px; }
 
-.log-grid { display: grid; grid-template-columns: minmax(0, 1fr) 64px 56px; gap: 6px 8px; align-items: center; margin-top: 8px; }
+.log-grid { display: grid; grid-template-columns: minmax(0, 1fr) 76px; gap: 6px 8px; align-items: center; margin-top: 8px; }
 .log-col { font-size: 13px; color: var(--muted); }
 .log-grid select { width: 100%; min-height: 44px; padding: 8px; border: 1px solid var(--line); border-radius: 8px; background: #fff; color: var(--text); }
 .log-grid select:disabled { background: var(--bg); }
-.log-tick { color: var(--ok); border-color: var(--ok); }
+.btn.send-log { display: block; width: 100%; margin-top: 12px; min-height: 54px; background: var(--ok); border-color: var(--ok); color: #fff; font-size: 17px; font-weight: 700; }
+.btn.send-task { flex: none; min-height: 40px; padding: 6px 12px; background: var(--ok); border-color: var(--ok); color: #fff; font-weight: 700; }
+.btn.archive { background: var(--brand); border-color: var(--brand); color: #fff; }
+.btn.archive.sent { background: var(--ok-soft); border-color: var(--ok); color: #1f6b2a; }
 
 .tasks, .entries, .plan-list { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 6px; }
 .task { display: flex; align-items: center; gap: 8px; padding: 6px 8px 6px 12px; border: 1px solid var(--line); border-radius: 10px; background: #fff; }
@@ -420,3 +423,6 @@ dialog textarea { width: 100%; }
 .sum-table td.muted { color: var(--muted); font-size: 13px; }
 .sum-table .linkbtn { text-align: left; }
 .btn.link-btn { display: block; margin-top: 10px; text-align: center; text-decoration: none; }
+.sum-table td.miss { color: var(--important); }
+.sum-table td.warn-c .linkbtn { color: #8a5a00; }
+.sum-table small { color: var(--muted); font-weight: 400; }

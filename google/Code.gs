@@ -15,7 +15,8 @@
  * στις 8:00 τη σύνοψη του προηγούμενου μήνα. Μετά: Ανάπτυξη → Διαχείριση αναπτύξεων →
  * μολύβι → Έκδοση: Νέα έκδοση → Ανάπτυξη.
  *
- * Τα φύλλα «Καταχωρήσεις» και «Εξοπλισμός» δημιουργούνται μόνα τους. Αν ο κώδικας
+ * Τα φύλλα «Καταχωρήσεις», «Εξοπλισμός» και «Checklists» (ανοίγματα/κλεισίματα)
+ * δημιουργούνται μόνα τους. Αν ο κώδικας
  * μπήκε ως νέο έργο (όχι μέσα από Google Sheet), δημιουργείται και το ίδιο το Google Sheet
  * «Lartecono – Αρχείο καθαριοτήτων» στο Google Drive.
  * Μην αλλάζεις τις κρυφές στήλες (id, store, …): τις χρησιμοποιεί η εφαρμογή.
@@ -27,6 +28,11 @@ const SH_EQUIP = 'Εξοπλισμός';
 const ENTRY_HEAD = ['Ημερομηνία', 'Κατάστημα', 'Είδος', 'Εξοπλισμός / χώρος', 'Νο', 'Υπεύθυνος', 'Καταχωρήθηκε',
   'id', 'store', 'type', 'eq', 'at'];
 const EQUIP_HEAD = ['Κατάστημα', 'Εξοπλισμός', 'Δηλώθηκε από', 'Ενημερώθηκε', 'store', 'setup'];
+const SH_CHECK = 'Checklists';
+const CHECK_HEAD = ['Ημερομηνία', 'Κατάστημα', 'Ενότητα', 'Υπεύθυνος', '✓', '✗', 'Χωρίς συμπλήρωση', 'Δεν έγιναν', 'Σημειώσεις', 'Στάλθηκε',
+  'key', 'store', 'section', 'at'];
+const SECTIONS = { opening: 'Άνοιγμα', closing: 'Κλείσιμο' };
+const VERSION = 2;
 const TYPES = { clean: 'Γενική καθαριότητα', defrost: 'Απόψυξη' };
 // Θέσεις στηλών (από 0) στο φύλλο «Καταχωρήσεις».
 const C = { d: 0, no: 4, by: 5, id: 7, store: 8, type: 9, eq: 10, at: 11 };
@@ -62,7 +68,7 @@ function run(p) {
   try {
     BOOK = book();
     switch (p.action) {
-      case 'ping': return { ok: true, app: 'lartecono-log', hasPassword: !!prop('PW_HASH'), sheetUrl: BOOK.getUrl() };
+      case 'ping': return { ok: true, app: 'lartecono-log', version: VERSION, hasPassword: !!prop('PW_HASH'), sheetUrl: BOOK.getUrl() };
       case 'sync': return sync(p);
       case 'archive': checkPw(p.pw); return archive(p);
       case 'remove': checkPw(p.pw); locked(() => applyOps([{ op: 'del', id: p.id, force: true }])); return { ok: true };
@@ -247,6 +253,7 @@ function applyOps(ops) {
     }
 
     if (o.op === 'equip') return Object.assign({ qid }, saveEquip(o));
+    if (o.op === 'checklist') return Object.assign({ qid }, saveChecklist(o));
 
     return { qid, ok: false, reason: 'bad' };
   });
@@ -283,6 +290,33 @@ function saveEquip(o) {
   return { ok: true };
 }
 
+// Checklist ανοίγματος/κλεισίματος: μία γραμμή ανά κατάστημα, ημέρα και ενότητα (η νεότερη αποστολή μένει).
+function saveChecklist(o) {
+  const store = code(o.store);
+  const c = o.c || {};
+  if (!store || !SECTIONS[c.section] || !isDay(c.date)) return { ok: false, reason: 'bad' };
+  const items = Array.isArray(c.items) ? c.items.slice(0, 200) : [];
+  const num = (v) => Math.max(0, Math.min(999, parseInt(v, 10) || 0));
+  const list = (fn) => items.filter(fn).map((it) => clean(`${num(it.n)}. ${clean(it.text, 200)}${it.note ? ' – ' + clean(it.note, 300) : ''}`, 600)).join('\n').slice(0, 20000);
+  const key = [store, c.date, c.section].join('|');
+  const at = isNaN(new Date(c.at)) ? new Date().toISOString() : new Date(c.at).toISOString();
+  const row = [c.date, clean(o.storeName), SECTIONS[c.section], clean(c.by), num(c.ok), num(c.no), num(c.left),
+    list((it) => it.s === 'no'), list((it) => it.s !== 'no' && it.note), stamp(at), key, store, c.section, at];
+  const sh = sheet(SH_CHECK, CHECK_HEAD, 11);
+  const data = values(sh);
+  let i = data.findIndex((r) => txt(r[10]) === key);
+  if (i < 0) i = data.length;
+  writeRows(sh, i + 2, [row], CHECK_HEAD.length);
+  return { ok: true };
+}
+
+function toChecklist(r) {
+  return {
+    d: txt(r[0]), section: txt(r[12]), by: txt(r[3]), ok: Number(r[4]) || 0, no: Number(r[5]) || 0, left: Number(r[6]) || 0,
+    notDone: txt(r[7]), notes: txt(r[8]), at: txt(r[13]),
+  };
+}
+
 function parseSetup(v) {
   try { return JSON.parse(txt(v)); } catch (e) { return null; }
 }
@@ -308,7 +342,7 @@ function archive(p) {
   const month = /^\d{4}-\d{2}$/.test(String(p.month)) ? String(p.month) : today().slice(0, 7);
   const stores = {};
   const get = (sk, name) => {
-    if (!stores[sk]) stores[sk] = { name: name || '', equip: null, entries: [] };
+    if (!stores[sk]) stores[sk] = { name: name || '', equip: null, entries: [], checklists: [] };
     if (name && !stores[sk].name) stores[sk].name = name;
     return stores[sk];
   };
@@ -319,6 +353,10 @@ function archive(p) {
   values(sheet(SH_ENTRIES, ENTRY_HEAD, C.id + 1)).forEach((r) => {
     const sk = txt(r[C.store]);
     if (sk && txt(r[C.d]).slice(0, 7) === month) get(sk, txt(r[1])).entries.push(toEntry(r));
+  });
+  values(sheet(SH_CHECK, CHECK_HEAD, 11)).forEach((r) => {
+    const sk = txt(r[11]);
+    if (sk && txt(r[0]).slice(0, 7) === month) get(sk, txt(r[1])).checklists.push(toChecklist(r));
   });
   return { ok: true, month, stores };
 }
@@ -436,12 +474,18 @@ function buildReport(month, asOf) {
   const text = [];
   let totalFails = 0;
   let totalReq = 0;
+  const [yy, mm] = month.split('-').map(Number);
+  const days = asOf ? Number(asOf.slice(8)) : new Date(yy, mm, 0).getDate();
   keys.forEach((sk) => {
     const st = data[sk] || {};
     const name = names[sk] || (sk === '__general' ? 'ΓΕΝΙΚΟ' : st.name || sk);
+    const cls = st.checklists || [];
+    const clCount = (sec) => `${new Set(cls.filter((c) => c.section === sec).map((c) => c.d)).size}/${days}`;
+    const clCell = `<td ${td}>${clCount('opening')} · ${clCount('closing')}</td>`;
+    text.push(`${name}: checklists άνοιγμα ${clCount('opening')} · κλείσιμο ${clCount('closing')}`);
     if (!st.equip) {
-      if (sk === '__general') return;
-      rows.push(`<tr><td ${tdl}><b>${esc(name)}</b></td><td ${tdl} colspan="3" style="color:#6b6b6b">Δεν έχει δηλωθεί εξοπλισμός</td></tr>`);
+      if (sk === '__general' && !cls.length) { text.pop(); return; }
+      rows.push(`<tr><td ${tdl}><b>${esc(name)}</b></td><td ${tdl} colspan="3" style="color:#6b6b6b">Δεν έχει δηλωθεί εξοπλισμός</td>${clCell}</tr>`);
       text.push(`${name}: δεν έχει δηλωθεί εξοπλισμός`);
       return;
     }
@@ -454,7 +498,7 @@ function buildReport(month, asOf) {
     const fails = res.filter((x) => !x.ok && x.ended);
     totalFails += fails.length;
     totalReq += res.length;
-    rows.push(`<tr${fails.length ? ' style="color:#c62828"' : ''}><td ${tdl}><b>${esc(name)}</b></td><td ${td}>${part('clean')}</td><td ${td}>${part('defrost')}</td><td ${td}>${fails.length ? '✗ ' + fails.length : '✓'}</td></tr>`);
+    rows.push(`<tr${fails.length ? ' style="color:#c62828"' : ''}><td ${tdl}><b>${esc(name)}</b></td><td ${td}>${part('clean')}</td><td ${td}>${part('defrost')}</td><td ${td}>${fails.length ? '✗ ' + fails.length : '✓'}</td>${clCell}</tr>`);
     text.push(`${name}: καθαριότητες ${part('clean')} · αποψύξεις ${part('defrost')} · ελλείψεις ${fails.length}`);
     if (fails.length) {
       const items = Object.keys(TYPES).map((type) => {
@@ -468,21 +512,21 @@ function buildReport(month, asOf) {
   });
   const sheetUrl = book().getUrl();
   const html = `<div style="font-family:Arial,sans-serif;color:#202936;max-width:640px">
-<h2 style="color:#1b2d47;margin:0 0 4px">Καθαριότητες / Αποψύξεις – ${label}</h2>
+<h2 style="color:#1b2d47;margin:0 0 4px">ΚΑΘΑΡΙΟΤΗΤΕΣ / ΑΠΟΨΥΞΕΙΣ – ${label}</h2>
 <p style="margin:0 0 12px;color:#6b6b6b">${asOf ? `Δοκιμαστικό report: μέχρι ${asOf.split('-').reverse().join('/')}.` : 'Μηνιαίο report όλων των καταστημάτων.'}</p>
 <table style="border-collapse:collapse;width:100%;font-size:14px">
-<tr style="background:#eceff7"><th ${tdl}>Κατάστημα</th><th ${td}>Καθαριότητες</th><th ${td}>Αποψύξεις</th><th ${td}>Ελλείψεις</th></tr>
+<tr style="background:#eceff7"><th ${tdl}>Κατάστημα</th><th ${td}>Καθαριότητες</th><th ${td}>Αποψύξεις</th><th ${td}>Ελλείψεις</th><th ${td}>Checklists<br>άνοιγμα · κλείσιμο</th></tr>
 ${rows.join('\n')}
 </table>
-<p style="font-size:13px;color:#6b6b6b">Έγιναν / απαιτούνται. «✗» = πόσες φορές δεν έγινε κάτι όπως ορίζεται.</p>
+<p style="font-size:13px;color:#6b6b6b">Έγιναν / απαιτούνται. «✗» = πόσες φορές δεν έγινε κάτι όπως ορίζεται. Checklists = σε πόσες ημέρες στάλθηκε στο αρχείο το checklist ανοίγματος · κλεισίματος.</p>
 ${details.length ? `<h2 style="color:#c62828;font-size:18px;margin:20px 0 0">Τι δεν έγινε</h2>${details.join('')}`
     : totalReq ? '<p><b>Όλα έγιναν όπως ορίζεται ✅</b></p>' : '<p><b>Δεν υπάρχουν ακόμα έλεγχοι για αυτόν τον μήνα.</b></p>'}
-<p style="margin-top:24px;font-size:13px"><a href="${sheetUrl}">Google Sheet με όλες τις καταχωρήσεις</a> · <a href="${APP_URL}">Εφαρμογή</a> (Καθαριότητες / Αποψύξεις → 🔒 Αρχείο)</p>
+<p style="margin-top:24px;font-size:13px"><a href="${sheetUrl}">Google Sheet με όλες τις καταχωρήσεις</a> · <a href="${APP_URL}">Εφαρμογή</a> (ΚΑΘΑΡΙΟΤΗΤΕΣ / ΑΠΟΨΥΞΕΙΣ → 🔒 Αρχείο)</p>
 </div>`;
   return {
     subject: `${asOf ? '[Δοκιμή] ' : ''}Καθαριότητες/Αποψύξεις – ${label} – ${totalFails ? totalFails + ' ελλείψεις' : totalReq ? 'όλα εντάξει' : 'χωρίς στοιχεία'}`,
     html,
-    text: [`Καθαριότητες / Αποψύξεις – ${label}`, ''].concat(text, ['', sheetUrl]).join('\n'),
+    text: [`ΚΑΘΑΡΙΟΤΗΤΕΣ / ΑΠΟΨΥΞΕΙΣ – ${label}`, ''].concat(text, ['', sheetUrl]).join('\n'),
   };
 }
 

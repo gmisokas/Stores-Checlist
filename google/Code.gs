@@ -2,14 +2,17 @@
  * Lartecono Stores Checklist – κοινό αρχείο καθαριοτήτων/αποψύξεων.
  *
  * Εγκατάσταση (μία φορά, από υπολογιστή):
- * 1. Νέο Google Sheet → Επεκτάσεις → Apps Script.
+ * 1. script.google.com → Νέο έργο
+ *    (ή, από ένα Google Sheet: Επεκτάσεις → Apps Script).
  * 2. Σβήσε ό,τι υπάρχει, επικόλλησε αυτόν τον κώδικα και πάτα Αποθήκευση.
  * 3. Ανάπτυξη → Νέα ανάπτυξη → Τύπος: Εφαρμογή ιστού.
  *    Εκτέλεση ως: Εγώ · Ποιος έχει πρόσβαση: Οποιοσδήποτε → Ανάπτυξη.
  * 4. Αντέγραψε τη διεύθυνση (τελειώνει σε /exec) στην εφαρμογή:
  *    Διαχείριση → Καθαριότητες → Κοινό αρχείο.
  *
- * Τα φύλλα «Καταχωρήσεις» και «Εξοπλισμός» δημιουργούνται μόνα τους.
+ * Τα φύλλα «Καταχωρήσεις» και «Εξοπλισμός» δημιουργούνται μόνα τους. Αν ο κώδικας
+ * μπήκε ως νέο έργο (όχι μέσα από Google Sheet), δημιουργείται και το ίδιο το Google Sheet
+ * «Lartecono – Αρχείο καθαριοτήτων» στο Google Drive.
  * Μην αλλάζεις τις κρυφές στήλες (id, store, …): τις χρησιμοποιεί η εφαρμογή.
  */
 
@@ -23,6 +26,8 @@ const TYPES = { clean: 'Γενική καθαριότητα', defrost: 'Απόψ
 // Θέσεις στηλών (από 0) στο φύλλο «Καταχωρήσεις».
 const C = { d: 0, no: 4, by: 5, id: 7, store: 8, type: 9, eq: 10, at: 11 };
 const MAX_OPS = 500;
+const BOOK_NAME = 'Lartecono – Αρχείο καθαριοτήτων';
+let BOOK = null;
 
 /* ---------- Είσοδος ---------- */
 
@@ -46,8 +51,9 @@ function reply(o) {
 
 function run(p) {
   try {
+    BOOK = book();
     switch (p.action) {
-      case 'ping': return { ok: true, app: 'lartecono-log', hasPassword: !!prop('PW_HASH') };
+      case 'ping': return { ok: true, app: 'lartecono-log', hasPassword: !!prop('PW_HASH'), sheetUrl: BOOK.getUrl() };
       case 'sync': return sync(p);
       case 'archive': checkPw(p.pw); return archive(p);
       case 'remove': checkPw(p.pw); locked(() => applyOps([{ op: 'del', id: p.id, force: true }])); return { ok: true };
@@ -97,8 +103,25 @@ function locked(fn) {
   try { return fn(); } finally { lock.releaseLock(); }
 }
 
+// Το Google Sheet του αρχείου: αυτό στο οποίο είναι «δεμένος» ο κώδικας ή, για ξεχωριστό
+// έργο, ένα που δημιουργείται την πρώτη φορά και θυμόμαστε το id του.
+function book() {
+  if (BOOK) return BOOK;
+  const active = SpreadsheetApp.getActiveSpreadsheet();
+  if (active) return active;
+  const id = prop('SHEET_ID');
+  if (id) return SpreadsheetApp.openById(id);
+  return locked(() => {
+    const again = prop('SHEET_ID');
+    if (again) return SpreadsheetApp.openById(again);
+    const ss = SpreadsheetApp.create(BOOK_NAME);
+    PropertiesService.getScriptProperties().setProperty('SHEET_ID', ss.getId());
+    return ss;
+  });
+}
+
 function sheet(name, head, hideFrom) {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const ss = book();
   let sh = ss.getSheetByName(name);
   if (!sh) {
     sh = ss.insertSheet(name);

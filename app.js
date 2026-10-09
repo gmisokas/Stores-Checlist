@@ -37,6 +37,7 @@ const state = {
   archive: null,
   archivePw: '',
   syncTest: '',
+  syncSheetUrl: '',
 };
 
 const $ = (id) => document.getElementById(id);

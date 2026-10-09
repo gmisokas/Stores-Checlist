@@ -1345,6 +1345,29 @@ function adminCleaning() {
     return h('div', { class: 'rule-row' }, h('span', { class: 'rule-label' }, LOG_TYPES[type]), min, '–', max, 'φορές /', per);
   };
 
+  // Μηνιαίο report με email (ρυθμίσεις στο Google Script, με τον κωδικό αρχείου).
+  const repTo = h('input', { type: 'text', inputmode: 'email', autocomplete: 'off', placeholder: 'π.χ. onoma@gmail.com, allos@gmail.com' });
+  const repPw = h('input', { type: 'password', autocomplete: 'current-password', placeholder: 'Κωδικός αρχείου' });
+  const repOut = h('pre', { class: 'hint result' });
+  const report = async (payload) => {
+    if (!repPw.value) { toast('Γράψε τον κωδικό αρχείου.'); repPw.focus(); return; }
+    repOut.textContent = 'Περίμενε…';
+    try {
+      const r = await apiCall(Object.assign({ action: 'report', pw: repPw.value }, payload));
+      repOut.textContent = [
+        payload.send ? '✓ Το δοκιμαστικό στάλθηκε. Δες τα εισερχόμενα (και τα ανεπιθύμητα).' : '✓ Αποθηκεύτηκε.',
+        'Παραλήπτες: ' + String(r.to || '').split(',').join(', '),
+        r.monthly ? 'Μηνιαία αποστολή: ενεργή ✓ (κάθε 1η του μήνα, 8:00)' : 'Μηνιαία αποστολή: ΔΕΝ είναι ενεργή. Στο Apps Script τρέξε μία φορά τη συνάρτηση «setupMonthlyReport».',
+      ].join('\n');
+    } catch (e) {
+      const m = String((e && e.message) || e);
+      repOut.textContent = m === 'emails' ? 'Κάποιο email δεν είναι σωστό. Χώρισε τα email με κόμμα.'
+        : m === 'unknown-action' ? 'Το Google Script είναι παλιά έκδοση. Επικόλλησε τον νέο κώδικα και κάνε «Νέα έκδοση» στην ανάπτυξη (οδηγίες στο README).'
+          : /auth|permission|εξουσιοδ|δικαίωμα/i.test(m) ? 'Χρειάζεται εξουσιοδότηση: στο Apps Script τρέξε μία φορά τη συνάρτηση «setupMonthlyReport».'
+            : apiMsg(e);
+    }
+  };
+
   return h('div', {},
     h('div', { class: 'box' },
       h('h2', {}, 'Κοινό αρχείο (Google)'),
@@ -1356,6 +1379,14 @@ function adminCleaning() {
       out,
       state.syncSheetUrl ? h('a', { class: 'btn link-btn', href: state.syncSheetUrl, target: '_blank', rel: 'noopener' }, 'Άνοιγμα του Google Sheet') : null,
       h('button', { type: 'button', class: 'btn', onclick: copyCode }, 'Αντιγραφή κώδικα Google Script')),
+    isShared ? h('div', { class: 'box' },
+      h('h2', {}, 'Μηνιαίο report (email)'),
+      h('p', { class: 'hint' }, 'Κάθε 1η του μήνα στις 8:00 έρχεται email με τη σύνοψη όλων των καταστημάτων για τον προηγούμενο μήνα και ό,τι δεν έγινε. Ενεργοποιείται μία φορά από το Apps Script (οδηγίες στο README: «Μηνιαίο report»).'),
+      h('label', { class: 'field' }, 'Email παραληπτών (κενό = ο λογαριασμός Google σου)', repTo),
+      h('label', { class: 'field' }, 'Κωδικός αρχείου', repPw),
+      h('button', { type: 'button', class: 'btn', onclick: () => report({ emails: repTo.value.trim() }) }, 'Αποθήκευση παραληπτών'),
+      h('button', { type: 'button', class: 'btn', onclick: () => report({ send: true }) }, 'Αποστολή δοκιμαστικού τώρα'),
+      repOut) : null,
     h('div', { class: 'box' },
       h('h2', {}, 'Κωδικός αρχείου'),
       isShared

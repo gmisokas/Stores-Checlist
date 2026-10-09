@@ -37,6 +37,8 @@ const state = {
   archive: null,
   archivePw: '',
   syncTest: '',
+  logSaving: false,
+  archSaving: false,
   syncSheetUrl: '',
 };
 
@@ -340,6 +342,7 @@ function setMark(key, val) {
   li.querySelector('.mark.ok').setAttribute('aria-pressed', String(p.s === 'ok'));
   li.querySelector('.mark.no').setAttribute('aria-pressed', String(p.s === 'no'));
   updateProgress();
+  updateArchiveBtn();
 }
 
 function setNote(key, text) {
@@ -350,6 +353,7 @@ function setNote(key, text) {
   setProg(prog);
   const li = document.querySelector(`.item[data-key="${CSS.escape(key)}"]`);
   li.querySelector('.note-btn').classList.toggle('has', !!p.n);
+  updateArchiveBtn();
 }
 
 function stats() {
@@ -404,6 +408,9 @@ async function share() {
   if (!f.name.value.trim()) { toast('Συμπλήρωσε το όνομα του υπευθύνου.'); f.name.focus(); return; }
   const s = stats();
   if (s.left && !confirm(`Υπάρχουν ${s.left} γραμμές χωρίς ✓ ή ✗. Να σταλεί έτσι;`)) return;
+  const a = archiveState();
+  if (shared() && (!a || a[0] === 'warn') && !confirm(a ? 'Υπάρχουν αλλαγές που δεν αποθηκεύτηκαν στο αρχείο. Να σταλεί έτσι στο Viber;'
+    : 'Δεν έγινε ακόμα «Αποθήκευση στο αρχείο». Να σταλεί έτσι στο Viber;')) return;
 
   await shareText(summaryText());
 }
@@ -411,17 +418,32 @@ async function share() {
 /* ---------- Αποστολή στο αρχείο (κοινό αρχείο Google) ---------- */
 
 function sentKey() { return `cl-sent:${f.store.value}:${f.date.value}:${state.section}`; }
+function progSig() { return JSON.stringify(getProg()); }
+
+// Κατάσταση αποθήκευσης του checklist στο αρχείο: ['ok'|'wait'|'warn', κείμενο] ή null.
+function archiveState() {
+  if (!shared() || !SECTIONS[state.section] || !f.store.value) return null;
+  if (state.archSaving) return ['wait', '⏳ Αποστολή…'];
+  let rec = lsGet(sentKey(), null);
+  if (!rec) return null;
+  if (typeof rec === 'string') rec = { at: rec, sig: null };
+  const pend = pendingOf(f.store.value).some((o) => o.op === 'checklist' && o.c.date === f.date.value && o.c.section === state.section);
+  if (pend) {
+    return ['wait', sync.oldScript ? '⏳ Δεν έγινε ακόμα αποστολή – περιμένει ενημέρωση του Google Script.'
+      : '⏳ Δεν έγινε ακόμα αποστολή – θα σταλεί μόλις υπάρξει σύνδεση.'];
+  }
+  if (rec.sig != null && rec.sig !== progSig()) return ['warn', '⚠️ Υπάρχουν αλλαγές που δεν αποθηκεύτηκαν στο αρχείο.'];
+  return ['ok', `✓ Έγινε αποστολή – ${new Date(rec.at).toTimeString().slice(0, 5)}`];
+}
 
 function updateArchiveBtn() {
   const btn = $('btn-archive');
+  const st = $('archive-status');
   btn.hidden = !shared();
-  if (btn.hidden) return;
-  const sent = SECTIONS[state.section] && f.store.value ? lsGet(sentKey(), '') : '';
-  const pend = sent && pendingOf(f.store.value).some((o) => o.op === 'checklist' && o.c.date === f.date.value && o.c.section === state.section);
-  btn.classList.toggle('sent', !!sent);
-  btn.textContent = !sent ? 'Αποστολή στο αρχείο'
-    : pend ? `⏳ ${sync.oldScript ? 'Περιμένει ενημέρωση του Google Script' : 'Περιμένει σύνδεση για το αρχείο'} – Αποστολή ξανά`
-      : `✓ Στάλθηκε στο αρχείο (${new Date(sent).toTimeString().slice(0, 5)}) – Αποστολή ξανά`;
+  btn.disabled = !!state.archSaving;
+  const a = btn.hidden ? null : archiveState();
+  st.hidden = !a;
+  if (a) { st.className = 'save-status ' + a[0]; st.textContent = a[1]; }
 }
 
 async function sendToArchive() {
@@ -430,7 +452,7 @@ async function sendToArchive() {
   if (!f.name.value.trim()) { toast('Συμπλήρωσε το όνομα του υπευθύνου.'); f.name.focus(); return; }
   if (!f.date.value) { toast('Συμπλήρωσε την ημερομηνία.'); f.date.focus(); return; }
   const s = stats();
-  if (s.left && !confirm(`Υπάρχουν ${s.left} γραμμές χωρίς ✓ ή ✗. Να σταλεί έτσι στο αρχείο;`)) return;
+  if (s.left && !confirm(`Υπάρχουν ${s.left} γραμμές χωρίς ✓ ή ✗. Να αποθηκευτεί έτσι στο αρχείο;`)) return;
   const sk = f.store.value;
   const c = {
     date: f.date.value,
@@ -445,20 +467,15 @@ async function sendToArchive() {
       return { n: i + 1, text: trunc(r.text, 200), s: p.s || '', note: (p.n || '').trim() };
     }),
   };
-  // Νέα αποστολή για την ίδια ημέρα/ενότητα αντικαθιστά όποια περιμένει ακόμα.
+  // Νέα αποθήκευση για την ίδια ημέρα/ενότητα αντικαθιστά όποια περιμένει ακόμα.
   lsSet(LOG_LS.queue, queueGet().filter((o) => !(o.op === 'checklist' && o.store === sk && o.c.date === c.date && o.c.section === c.section)));
   queueAdd({ op: 'checklist', store: sk, storeName: storeLabel(), c });
-  lsSet(sentKey(), c.at);
-  const btn = $('btn-archive');
-  btn.disabled = true;
-  btn.textContent = 'Αποστολή…';
-  await syncStore(sk);
-  btn.disabled = false;
+  lsSet(sentKey(), { at: c.at, sig: progSig() });
+  state.archSaving = true;
   updateArchiveBtn();
-  const waiting = pendingOf(sk).some((o) => o.op === 'checklist' && o.c.date === c.date && o.c.section === c.section);
-  toast(!waiting ? `✓ Το checklist ${SECTIONS[state.section].toLowerCase()} στάλθηκε στο αρχείο.`
-    : sync.oldScript ? 'Το Google Script χρειάζεται ενημέρωση για να δέχεται checklists (Διαχείριση → Καθαριότητες, οδηγίες στο README). Το checklist κρατήθηκε και θα σταλεί μετά.'
-      : 'Δεν υπάρχει σύνδεση: θα σταλεί στο αρχείο μόλις επανέλθει.', waiting ? 8000 : 5000);
+  await syncStore(sk);
+  state.archSaving = false;
+  updateArchiveBtn();
 }
 
 // Κοινοποίηση κειμένου (Viber κ.λπ.)· αλλιώς αντιγραφή ή παράθυρο με το κείμενο.
@@ -1290,7 +1307,11 @@ async function init() {
   $('draft-banner').hidden = !state.hasDraft;
 
   f.date.addEventListener('change', renderChecklist);
+  let prevStore = f.store.value;
+  f.store.addEventListener('focus', () => { prevStore = f.store.value; });
   f.store.addEventListener('change', () => {
+    if (state.section === 'log' && prevStore !== f.store.value && !draftLeaveOk(prevStore)) { f.store.value = prevStore; return; }
+    prevStore = f.store.value;
     rememberLast();
     state.logMode = 'main';
     state.logArchiveMonth = null;
@@ -1299,6 +1320,7 @@ async function init() {
   });
   f.name.addEventListener('input', () => { rememberLast(); updateWho(); });
   document.querySelectorAll('#section-seg button').forEach((b) => b.addEventListener('click', () => {
+    if (state.section === 'log' && b.dataset.section !== 'log' && !draftLeaveOk(f.store.value)) return;
     state.section = b.dataset.section;
     if (state.section === 'log' && state.logMode !== 'archive') state.logMode = 'main';
     renderChecklist();
@@ -1310,6 +1332,10 @@ async function init() {
 
   $('btn-share').addEventListener('click', share);
   $('btn-archive').addEventListener('click', sendToArchive);
+  // Τικ καθαριοτήτων/αποψύξεων που δεν αποθηκεύτηκαν: ο browser ρωτά πριν κλείσει η σελίδα.
+  window.addEventListener('beforeunload', (e) => {
+    if (f.store.value && getDraft(f.store.value).length) { e.preventDefault(); e.returnValue = ''; }
+  });
   $('btn-excel').addEventListener('click', exportExcel);
   $('btn-print').addEventListener('click', () => {
     if (!SECTIONS[state.section]) { toast('Επίλεξε πρώτα Άνοιγμα ή Κλείσιμο.'); return; }

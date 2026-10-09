@@ -525,7 +525,7 @@
   ],
   "cleaning": {
     "passwordHash": "",
-    "syncUrl": "",
+    "syncUrl": "https://script.google.com/macros/s/AKfycbznKzNejg7BDs2CRNKLtLtguiSkCMU_V7G36JsSoCF-yAjvr8sAvl4IrD79WrnGcbJp/exec",
     "equipment": [
       {
         "id": "katapsyxi",

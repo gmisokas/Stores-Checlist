@@ -355,7 +355,7 @@ dialog textarea { width: 100%; }
 
 
 .tasks, .entries, .plan-list { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 6px; }
-.task { display: flex; align-items: center; gap: 8px; padding: 6px 8px 6px 12px; border: 1px solid var(--line); border-radius: 10px; background: #fff; }
+.task { display: flex; align-items: center; gap: 8px; min-height: 44px; padding: 6px 12px; border: 1px solid var(--line); border-radius: 10px; background: #fff; }
 .task.done { border-color: var(--ok); background: var(--ok-soft); }
 .task-text { flex: 1; }
 .task-text small, .entries small, .plan-list small, .sum-table small { color: var(--muted); }

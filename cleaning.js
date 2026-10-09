@@ -705,13 +705,14 @@ function logMain(sk, setup) {
     const [a, b] = logWindows(t.u.rule, mi.dim)[t.w];
     return day >= a && day <= b;
   });
+  // Μόνο ενημέρωση: η καταχώρηση γίνεται από τα πεδία Εξοπλισμός / Νο / ✓.
   const taskRow = (t) => h('li', { class: 'task' + (t.done ? ' done' : '') },
     h('span', { class: 'task-text' }, t.u.label, h('small', {}, ' · ' + freqText(t.u.rule))),
     t.done
-      ? h('span', { class: 'done-tag' }, '✓ Έγινε')
+      ? h('span', { class: 'done-tag' }, 'Έγινε')
       : inDraft(sk, type, t.u.eq.id, t.u.no, date)
-        ? h('span', { class: 'todo-tag' }, '✓ Προς αποθήκευση')
-        : h('button', { type: 'button', class: 'mark ok', 'aria-label': 'Έγινε', onclick: () => addDraft(sk, type, t.u.eq, t.u.no) }, '✓'));
+        ? h('span', { class: 'todo-tag' }, 'Προς αποθήκευση')
+        : null);
   const isToday = date === today;
   const dow = new Date(date + 'T12:00:00').getDay();
   const planCard = h('div', { class: 'box' },

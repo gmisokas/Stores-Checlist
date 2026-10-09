@@ -23,6 +23,14 @@ const state = {
   adminTab: 'general',
   adminSection: 'opening',
   adminStore: null,
+  // Αρχείο καθαριοτήτων/αποψύξεων
+  logType: 'clean',
+  logMode: 'main',
+  logCalMonth: null,
+  logCalDay: null,
+  logCalOpen: false,
+  logArchiveMonth: null,
+  logDateSeen: null,
 };
 
 const $ = (id) => document.getElementById(id);
@@ -56,7 +64,7 @@ function h(tag, attrs, ...children) {
     else if (k.startsWith('on')) el.addEventListener(k.slice(2), v);
     else el.setAttribute(k, v === true ? '' : v);
   }
-  for (const c of children.flat()) {
+  for (const c of children.flat(Infinity)) {
     if (c == null || c === false) continue;
     el.append(c instanceof Node ? c : String(c));
   }
@@ -114,6 +122,7 @@ function normalize(data) {
       if (!x.after) x.after = 'start';
     });
   });
+  data.cleaning = normalizeCleaning(data.cleaning);
   return data;
 }
 
@@ -225,18 +234,23 @@ function updateHeader() {
 
 function renderChecklist() {
   updateHeader();
-  const rows = buildRows(state.section, currentStore());
-  const prog = getProg();
+  const isLog = state.section === 'log';
+  const rows = isLog ? [] : buildRows(state.section, currentStore());
+  const prog = isLog ? {} : getProg();
   const chosen = !!SECTIONS[state.section];
+  $('items').hidden = isLog;
+  $('log-view').hidden = !isLog;
   $('items').replaceChildren(...(chosen
     ? rows.map((r, i) => rowEl(r, i + 1, prog))
-    : [h('li', { class: 'pick-hint' }, 'Επίλεξε «Άνοιγμα» ή «Κλείσιμο» για να εμφανιστεί η λίστα.')]));
+    : [h('li', { class: 'pick-hint' }, 'Επίλεξε «Άνοιγμα», «Κλείσιμο» ή «Καθαριότητες / Αποψύξεις».')]));
   $('legend').hidden = !rows.some((r) => r.extra);
   document.querySelector('#view-checklist .progress').hidden = !chosen;
-  document.querySelector('#view-checklist .actions').hidden = !chosen;
-  document.querySelectorAll('#view-checklist .seg button').forEach((b) => {
+  $('checklist-actions').hidden = !chosen;
+  document.querySelectorAll('#section-seg button').forEach((b) => {
     b.setAttribute('aria-pressed', String(b.dataset.section === state.section));
   });
+  renderLogNotice();
+  if (isLog) renderLog();
   updateProgress();
 }
 
@@ -383,7 +397,11 @@ async function share() {
   const s = stats();
   if (s.left && !confirm(`Υπάρχουν ${s.left} γραμμές χωρίς ✓ ή ✗. Να σταλεί έτσι;`)) return;
 
-  const text = summaryText();
+  await shareText(summaryText());
+}
+
+// Κοινοποίηση κειμένου (Viber κ.λπ.)· αλλιώς αντιγραφή ή παράθυρο με το κείμενο.
+async function shareText(text) {
   if (navigator.share) {
     try { await navigator.share({ text }); return; } catch (e) { if (e.name === 'AbortError') return; }
   }
@@ -499,15 +517,19 @@ function xmlEsc(v) {
 }
 
 // Στυλ κελιών (δείκτες στο cellXfs του styles.xml).
-const XS = { title: 1, label: 2, head: 3, cell: 4, center: 5, xCell: 6, xCenter: 7, imp: 8, impX: 9 };
+const XS = {
+  title: 1, label: 2, head: 3, cell: 4, center: 5, xCell: 6, xCenter: 7, imp: 8, impX: 9,
+  // Αρχείο καθαριοτήτων/αποψύξεων
+  dCell: 10, dSug: 11, dDone: 12, dWe: 13, headWe: 14, bad: 15, good: 16,
+};
 
 const XLSX_STYLES = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
-<fonts count="4"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><color rgb="FFC62828"/><name val="Calibri"/></font><font><b/><sz val="14"/><name val="Calibri"/></font></fonts>
-<fills count="4"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FFE0E0E0"/></patternFill></fill><fill><patternFill patternType="solid"><fgColor rgb="FFFFF3C4"/></patternFill></fill></fills>
+<fonts count="5"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><color rgb="FFC62828"/><name val="Calibri"/></font><font><b/><sz val="14"/><name val="Calibri"/></font><font><b/><sz val="11"/><color rgb="FF2E7D32"/><name val="Calibri"/></font></fonts>
+<fills count="8"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FFE0E0E0"/></patternFill></fill><fill><patternFill patternType="solid"><fgColor rgb="FFFFF3C4"/></patternFill></fill><fill><patternFill patternType="solid"><fgColor rgb="FFD6E6FF"/></patternFill></fill><fill><patternFill patternType="solid"><fgColor rgb="FFC8E6C9"/></patternFill></fill><fill><patternFill patternType="solid"><fgColor rgb="FFF0F0F0"/></patternFill></fill><fill><patternFill patternType="solid"><fgColor rgb="FFBDBDBD"/></patternFill></fill></fills>
 <borders count="2"><border><left/><right/><top/><bottom/><diagonal/></border><border><left style="thin"/><right style="thin"/><top style="thin"/><bottom style="thin"/><diagonal/></border></borders>
 <cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>
-<cellXfs count="10">
+<cellXfs count="17">
 <xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>
 <xf numFmtId="0" fontId="3" fillId="0" borderId="0" xfId="0" applyFont="1"/>
 <xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1"/>
@@ -518,6 +540,13 @@ const XLSX_STYLES = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <xf numFmtId="0" fontId="0" fillId="3" borderId="1" xfId="0" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="top"/></xf>
 <xf numFmtId="0" fontId="2" fillId="0" borderId="1" xfId="0" applyFont="1" applyBorder="1" applyAlignment="1"><alignment vertical="top" wrapText="1"/></xf>
 <xf numFmtId="0" fontId="2" fillId="3" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment vertical="top" wrapText="1"/></xf>
+<xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>
+<xf numFmtId="0" fontId="0" fillId="4" borderId="1" xfId="0" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>
+<xf numFmtId="0" fontId="4" fillId="5" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>
+<xf numFmtId="0" fontId="0" fillId="6" borderId="1" xfId="0" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>
+<xf numFmtId="0" fontId="1" fillId="7" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>
+<xf numFmtId="0" fontId="2" fillId="0" borderId="1" xfId="0" applyFont="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>
+<xf numFmtId="0" fontId="4" fillId="0" borderId="1" xfId="0" applyFont="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>
 </cellXfs>
 <cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>
 </styleSheet>`;
@@ -551,27 +580,35 @@ function buildXlsx() {
     row([['A', 'Οι κίτρινες γραμμές αφορούν ιδιαιτερότητες του συγκεκριμένου καταστήματος.', 0]]);
   }
 
-  const sheet = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+  const cols = '<col min="1" max="1" width="5" customWidth="1"/><col min="2" max="2" width="70" customWidth="1"/><col min="3" max="4" width="5" customWidth="1"/><col min="5" max="5" width="35" customWidth="1"/>';
+  const pane = `ySplit="${headRow}" topLeftCell="A${headRow + 1}" activePane="bottomLeft"`;
+  return xlsxBlob([{ name: SECTIONS[state.section], xml: sheetXml(rowsXml, cols, pane, 'portrait') }]);
+}
+
+// Ένα φύλλο: γραμμές XML, πλάτη στηλών, «πάγωμα» κεφαλίδας, προσανατολισμός A4.
+function sheetXml(rowsXml, colsXml, paneAttrs, orientation) {
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
 <sheetPr><pageSetUpPr fitToPage="1"/></sheetPr>
-<sheetViews><sheetView workbookViewId="0"><pane ySplit="${headRow}" topLeftCell="A${headRow + 1}" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>
-<cols><col min="1" max="1" width="5" customWidth="1"/><col min="2" max="2" width="70" customWidth="1"/><col min="3" max="4" width="5" customWidth="1"/><col min="5" max="5" width="35" customWidth="1"/></cols>
+<sheetViews><sheetView workbookViewId="0"><pane ${paneAttrs} state="frozen"/></sheetView></sheetViews>
+<cols>${colsXml}</cols>
 <sheetData>${rowsXml.join('')}</sheetData>
-<pageSetup paperSize="9" orientation="portrait" fitToWidth="1" fitToHeight="0"/>
+<pageMargins left="0.4" right="0.4" top="0.5" bottom="0.5" header="0.3" footer="0.3"/>
+<pageSetup paperSize="9" orientation="${orientation}" fitToWidth="1" fitToHeight="0"/>
 </worksheet>`;
-  const sheetName = SECTIONS[state.section];
+}
 
+// Αρχείο .xlsx με ένα ή περισσότερα φύλλα: [{name, xml}].
+function xlsxBlob(sheets) {
+  const x = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n';
+  const sheetType = 'application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml';
   return zipStore([
-    ['[Content_Types].xml', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/></Types>`],
-    ['_rels/.rels', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>`],
-    ['xl/workbook.xml', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="${xmlEsc(sheetName)}" sheetId="1" r:id="rId1"/></sheets></workbook>`],
-    ['xl/_rels/workbook.xml.rels', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>`],
+    ['[Content_Types].xml', `${x}<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>${sheets.map((s, i) => `<Override PartName="/xl/worksheets/sheet${i + 1}.xml" ContentType="${sheetType}"/>`).join('')}<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/></Types>`],
+    ['_rels/.rels', `${x}<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>`],
+    ['xl/workbook.xml', `${x}<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets>${sheets.map((s, i) => `<sheet name="${xmlEsc(s.name.replace(/[\\/?*[\]:]/g, '-').slice(0, 31))}" sheetId="${i + 1}" r:id="rId${i + 1}"/>`).join('')}</sheets></workbook>`],
+    ['xl/_rels/workbook.xml.rels', `${x}<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">${sheets.map((s, i) => `<Relationship Id="rId${i + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet${i + 1}.xml"/>`).join('')}<Relationship Id="rId${sheets.length + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>`],
     ['xl/styles.xml', XLSX_STYLES],
-    ['xl/worksheets/sheet1.xml', sheet],
+    ...sheets.map((s, i) => [`xl/worksheets/sheet${i + 1}.xml`, s.xml]),
   ]);
 }
 
@@ -587,7 +624,11 @@ async function exportExcel() {
   const blob = buildXlsx();
   const sec = state.section === 'opening' ? 'anoigma' : 'kleisimo';
   const store = toLatin(storeLabel() || 'xoris-katastima').replace(/[^A-Za-z0-9-]+/g, '-');
-  const name = `checklist_${store}_${sec}_${f.date.value}.xlsx`;
+  await deliverFile(blob, `checklist_${store}_${sec}_${f.date.value}.xlsx`);
+}
+
+// Στο κινητό ανοίγει την κοινοποίηση (και «Αποθήκευση σε Αρχεία»), αλλιώς κανονική λήψη.
+async function deliverFile(blob, name) {
   const file = typeof File === 'function' ? new File([blob], name, { type: blob.type }) : null;
   const mobile = window.matchMedia && window.matchMedia('(pointer: coarse)').matches;
   if (mobile && file && navigator.canShare && navigator.canShare({ files: [file] })) {
@@ -618,7 +659,8 @@ function renderAdmin() {
   });
   const body = state.adminTab === 'general' ? adminGeneral()
     : state.adminTab === 'stores' ? adminStores()
-      : adminSave();
+      : state.adminTab === 'cleaning' ? adminCleaning()
+        : adminSave();
   $('admin-body').replaceChildren(body);
 }
 
@@ -949,6 +991,7 @@ function cleanData(data) {
         .map((x) => Object.assign(x, { text: (x.text || '').trim() }))
         .filter((x) => x.text),
     }));
+  out.cleaning = cleanCleaning(out.cleaning);
   return out;
 }
 
@@ -1172,6 +1215,7 @@ async function init() {
 
   await load();
   cleanupOldProgress();
+  cleanupOldLog();
 
   const last = lsGet(LS.last, {});
   f.date.value = todayISO();
@@ -1180,10 +1224,16 @@ async function init() {
   $('draft-banner').hidden = !state.hasDraft;
 
   f.date.addEventListener('change', renderChecklist);
-  f.store.addEventListener('change', () => { rememberLast(); renderChecklist(); });
-  f.name.addEventListener('input', rememberLast);
-  document.querySelectorAll('#view-checklist .seg button').forEach((b) => b.addEventListener('click', () => {
+  f.store.addEventListener('change', () => {
+    rememberLast();
+    state.logMode = 'main';
+    state.logArchiveMonth = null;
+    renderChecklist();
+  });
+  f.name.addEventListener('input', () => { rememberLast(); updateWho(); });
+  document.querySelectorAll('#section-seg button').forEach((b) => b.addEventListener('click', () => {
     state.section = b.dataset.section;
+    if (state.section === 'log' && state.logMode !== 'archive') state.logMode = 'main';
     renderChecklist();
   }));
   document.querySelectorAll('.tabs button').forEach((b) => b.addEventListener('click', () => {
@@ -1198,7 +1248,9 @@ async function init() {
     renderPrint();
     window.print();
   });
-  window.addEventListener('beforeprint', () => { if (SECTIONS[state.section]) renderPrint(); });
+  window.addEventListener('beforeprint', () => {
+    if (SECTIONS[state.section]) renderPrint(); else $('print-area').replaceChildren();
+  });
   $('btn-reset').addEventListener('click', () => {
     if (!confirm(`Να σβηστούν όλα τα ✓/✗ και οι σημειώσεις για «${SECTIONS[state.section]}» αυτής της ημέρας;`)) return;
     lsDel(progKey());

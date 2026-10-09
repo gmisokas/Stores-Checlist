@@ -12,7 +12,7 @@
   <link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
   <link rel="icon" type="image/png" href="assets/favicon.png">
   <title>Lartecono Stores Checklist</title>
-  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="style.css?v=3">
 </head>
 <body>
   <div id="app">
@@ -45,11 +45,14 @@
         </label>
       </section>
 
+      <div id="log-notice"></div>
+
       <div class="sticky">
         <div class="pick-label">Επιλέξτε:</div>
-        <div class="seg" role="group" aria-label="Ενότητα">
+        <div id="section-seg" class="seg seg3" role="group" aria-label="Ενότητα">
           <button type="button" data-section="opening">Άνοιγμα</button>
           <button type="button" data-section="closing">Κλείσιμο</button>
+          <button type="button" data-section="log">Καθαριότητες / Αποψύξεις</button>
         </div>
         <div class="progress">
           <div class="bar"><div id="bar-fill"></div></div>
@@ -64,7 +67,10 @@
 
       <ol id="items" class="items"></ol>
 
-      <section class="actions">
+      <!-- Αρχείο γενικών καθαριοτήτων / αποψύξεων -->
+      <section id="log-view" hidden></section>
+
+      <section id="checklist-actions" class="actions">
         <button type="button" id="btn-share" class="btn primary">Αποστολή στο Viber</button>
         <button type="button" id="btn-excel" class="btn">Αποθήκευση σε Excel</button>
         <button type="button" id="btn-print" class="btn">Εκτύπωση A4</button>
@@ -83,6 +89,7 @@
       <div class="tabs" role="tablist">
         <button type="button" data-tab="general">Γενικό checklist</button>
         <button type="button" data-tab="stores">Καταστήματα</button>
+        <button type="button" data-tab="cleaning">Καθαριότητες</button>
         <button type="button" data-tab="save">Αποθήκευση</button>
       </div>
       <div id="admin-body"></div>
@@ -122,8 +129,12 @@
     <button type="button" class="btn dark" id="a2hs-ok">Το κατάλαβα</button>
   </dialog>
 
+  <!-- Επιλογές πριν από την εξαγωγή του αρχείου καθαριοτήτων σε Excel -->
+  <dialog id="log-dialog"><div id="log-dialog-body"></div></dialog>
+
   <div id="toast" class="toast" hidden></div>
 
-  <script src="app.js"></script>
+  <script src="cleaning.js?v=3"></script>
+  <script src="app.js?v=3"></script>
 </body>
 </html>

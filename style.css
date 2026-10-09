@@ -413,3 +413,9 @@ dialog textarea { width: 100%; }
 #log-dialog h2 { margin-bottom: 8px; }
 #log-dialog .stack { margin-top: 14px; }
 #log-dialog .field select { width: 100%; min-height: 44px; padding: 8px; border: 1px solid var(--line); border-radius: 8px; background: #fff; }
+
+/* Κοινό αρχείο */
+.log-sync { margin: 0; font-size: 13px; color: var(--muted); }
+.log-wait .box p { margin: 4px 0 10px; }
+.sum-table td.muted { color: var(--muted); font-size: 13px; }
+.sum-table .linkbtn { text-align: left; }

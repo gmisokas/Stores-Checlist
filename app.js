@@ -30,7 +30,13 @@ const state = {
   logCalDay: null,
   logCalOpen: false,
   logArchiveMonth: null,
+  logArchiveStore: '',
   logDateSeen: null,
+  logSel: null,
+  // Κοινό αρχείο: δεδομένα του μήνα που είναι ανοιχτός στο Αρχείο και ο κωδικός (μόνο στη μνήμη).
+  archive: null,
+  archivePw: '',
+  syncTest: '',
 };
 
 const $ = (id) => document.getElementById(id);
@@ -409,10 +415,15 @@ async function shareText(text) {
     await navigator.clipboard.writeText(text);
     toast('Αντιγράφηκε. Άνοιξε το Viber και κάνε επικόλληση.', 5000);
   } catch (e) {
-    $('text-dialog-text').value = text;
-    $('text-dialog').showModal();
-    $('text-dialog-text').select();
+    showTextDialog('Αντίγραψε το κείμενο και επικόλλησέ το στο Viber:', text);
   }
+}
+
+function showTextDialog(msg, text) {
+  $('text-dialog-msg').textContent = msg;
+  $('text-dialog-text').value = text;
+  $('text-dialog').showModal();
+  $('text-dialog-text').select();
 }
 
 /* ---------- Εκτύπωση ---------- */
@@ -1229,6 +1240,7 @@ async function init() {
     state.logMode = 'main';
     state.logArchiveMonth = null;
     renderChecklist();
+    syncStore(f.store.value);
   });
   f.name.addEventListener('input', () => { rememberLast(); updateWho(); });
   document.querySelectorAll('#section-seg button').forEach((b) => b.addEventListener('click', () => {
@@ -1260,6 +1272,7 @@ async function init() {
   window.addEventListener('hashchange', route);
   route();
   initA2hs();
+  initLogSync();
 }
 
 init();

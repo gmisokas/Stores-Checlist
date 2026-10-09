@@ -525,6 +525,7 @@
   ],
   "cleaning": {
     "passwordHash": "",
+    "syncUrl": "",
     "equipment": [
       {
         "id": "katapsyxi",

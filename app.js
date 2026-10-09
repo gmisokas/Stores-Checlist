@@ -408,9 +408,12 @@ async function share() {
   if (!f.name.value.trim()) { toast('Συμπλήρωσε το όνομα του υπευθύνου.'); f.name.focus(); return; }
   const s = stats();
   if (s.left && !confirm(`Υπάρχουν ${s.left} γραμμές χωρίς ✓ ή ✗. Να σταλεί έτσι;`)) return;
-  const a = archiveState();
-  if (shared() && (!a || a[0] === 'warn') && !confirm(a ? 'Υπάρχουν αλλαγές που δεν αποθηκεύτηκαν στο αρχείο. Να σταλεί έτσι στο Viber;'
-    : 'Δεν έγινε ακόμα «Αποθήκευση στο αρχείο». Να σταλεί έτσι στο Viber;')) return;
+  // Η αποστολή στο Viber αποθηκεύει και στο αρχείο (χωρίς αναμονή: η κοινοποίηση ανοίγει αμέσως).
+  if (shared() && f.store.value && f.date.value) {
+    queueChecklist();
+    syncStore(f.store.value);
+    updateArchiveBtn();
+  }
 
   await shareText(summaryText());
 }
@@ -428,6 +431,7 @@ function archiveState() {
   if (!rec) return null;
   if (typeof rec === 'string') rec = { at: rec, sig: null };
   const pend = pendingOf(f.store.value).some((o) => o.op === 'checklist' && o.c.date === f.date.value && o.c.section === state.section);
+  if (pend && sync.busy[f.store.value]) return ['wait', '⏳ Αποστολή…'];
   if (pend) {
     return ['wait', sync.oldScript ? '⏳ Δεν έγινε ακόμα αποστολή – περιμένει ενημέρωση του Google Script.'
       : '⏳ Δεν έγινε ακόμα αποστολή – θα σταλεί μόλις υπάρξει σύνδεση.'];
@@ -446,13 +450,9 @@ function updateArchiveBtn() {
   if (a) { st.className = 'save-status ' + a[0]; st.textContent = a[1]; }
 }
 
-async function sendToArchive() {
-  if (!SECTIONS[state.section]) { toast('Επίλεξε πρώτα Άνοιγμα ή Κλείσιμο.'); return; }
-  if (!f.store.value) { toast('Επίλεξε πρώτα κατάστημα.'); f.store.focus(); return; }
-  if (!f.name.value.trim()) { toast('Συμπλήρωσε το όνομα του υπευθύνου.'); f.name.focus(); return; }
-  if (!f.date.value) { toast('Συμπλήρωσε την ημερομηνία.'); f.date.focus(); return; }
+// Το checklist μπαίνει στην ουρά για το κοινό αρχείο (χωρίς αναμονή δικτύου).
+function queueChecklist() {
   const s = stats();
-  if (s.left && !confirm(`Υπάρχουν ${s.left} γραμμές χωρίς ✓ ή ✗. Να αποθηκευτεί έτσι στο αρχείο;`)) return;
   const sk = f.store.value;
   const c = {
     date: f.date.value,
@@ -471,6 +471,17 @@ async function sendToArchive() {
   lsSet(LOG_LS.queue, queueGet().filter((o) => !(o.op === 'checklist' && o.store === sk && o.c.date === c.date && o.c.section === c.section)));
   queueAdd({ op: 'checklist', store: sk, storeName: storeLabel(), c });
   lsSet(sentKey(), { at: c.at, sig: progSig() });
+}
+
+async function sendToArchive() {
+  if (!SECTIONS[state.section]) { toast('Επίλεξε πρώτα Άνοιγμα ή Κλείσιμο.'); return; }
+  if (!f.store.value) { toast('Επίλεξε πρώτα κατάστημα.'); f.store.focus(); return; }
+  if (!f.name.value.trim()) { toast('Συμπλήρωσε το όνομα του υπευθύνου.'); f.name.focus(); return; }
+  if (!f.date.value) { toast('Συμπλήρωσε την ημερομηνία.'); f.date.focus(); return; }
+  const s = stats();
+  if (s.left && !confirm(`Υπάρχουν ${s.left} γραμμές χωρίς ✓ ή ✗. Να αποθηκευτεί έτσι στο αρχείο;`)) return;
+  const sk = f.store.value;
+  queueChecklist();
   state.archSaving = true;
   updateArchiveBtn();
   await syncStore(sk);

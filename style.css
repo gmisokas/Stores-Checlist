@@ -114,10 +114,13 @@ button, input, select, textarea { font: inherit; color: inherit; }
 #view-checklist .seg button[data-section="closing"] { border-color: var(--no); color: var(--no); }
 #view-checklist .seg button[data-section="opening"][aria-pressed="true"] { background: var(--ok); color: #fff; }
 #view-checklist .seg button[data-section="closing"][aria-pressed="true"] { background: var(--no); color: #fff; }
-.seg3 { grid-template-columns: 1fr 1fr 1.25fr; }
-/* Οι τρεις ενότητες με κεφαλαία: ίδιο μέγεθος γραμμάτων και στα τρία κουμπιά. */
-.seg3 button { padding: 2px 4px; font-size: 14px; line-height: 1.15; }
-@media (min-width: 600px) { .seg3 button { font-size: 16px; } }
+.seg4 { grid-template-columns: 1fr 1fr; }
+/* Οι τέσσερις ενότητες σε δύο σειρές, με ίδιο μέγεθος γραμμάτων. */
+.seg4 button { padding: 2px 6px; font-size: 15px; line-height: 1.15; }
+@media (min-width: 600px) { .seg4 button { font-size: 16px; } }
+#view-checklist .seg button[data-section="todo"] { border-color: var(--extra-line); color: #8a5a00; }
+#view-checklist .seg button[data-section="todo"][aria-pressed="true"] { background: var(--extra-line); color: #fff; }
+.badge { display: inline-block; min-width: 22px; margin-left: 4px; padding: 1px 6px; border-radius: 11px; background: var(--important); color: #fff; font-size: 13px; line-height: 20px; vertical-align: 1px; }
 
 .progress { margin-top: 10px; }
 .bar { height: 8px; background: var(--line); border-radius: 4px; overflow: hidden; }
@@ -443,6 +446,13 @@ dialog textarea { width: 100%; }
 .sum-table td.miss { color: var(--important); }
 .sum-table td.warn-c .linkbtn { color: #8a5a00; }
 .sum-table small { color: var(--muted); font-weight: 400; }
+
+/* ΕΚΚΡΕΜΟΤΗΤΕΣ */
+.todo-box.late { border: 2px solid var(--extra-line); }
+.todo-box.warn { border: 2px solid var(--extra-line); background: #fff8e1; }
+.todo-box.alert { border: 2px solid var(--no); background: var(--no-soft); }
+.todo-box.alert .stack { margin-top: 10px; }
+.todo-ok p { margin: 0; font-weight: 700; color: #1f6b2a; }
 
 /* Καθυστερήσεις και «Δεν έγινε» με αιτία */
 .log-late { margin: 0 0 12px; padding: 10px 12px; background: #fff3e0; border: 2px solid var(--extra-line); border-radius: 10px; font-size: 15px; }

@@ -7,8 +7,8 @@
    ========================================================== */
 
 // Έκδοση της εφαρμογής. Σε κάθε αλλαγή: ίδιος αριθμός εδώ, στο version.json και στα ?v= του index.html.
-const APP_VERSION = '20';
-// Οι τρεις ενότητες γράφονται πάντα με κεφαλαία (ΑΝΟΙΓΜΑ, ΚΛΕΙΣΙΜΟ, ΚΑΘΑΡΙΟΤΗΤΕΣ / ΑΠΟΨΥΞΕΙΣ).
+const APP_VERSION = '21';
+// Οι ενότητες γράφονται πάντα με κεφαλαία (ΑΝΟΙΓΜΑ, ΚΛΕΙΣΙΜΟ, ΚΑΘΑΡΙΟΤΗΤΕΣ / ΑΠΟΨΥΞΕΙΣ, ΕΚΚΡΕΜΟΤΗΤΕΣ).
 const SECTIONS = { opening: 'ΑΝΟΙΓΜΑ', closing: 'ΚΛΕΙΣΙΜΟ' };
 const GENERAL_ID = '__general';
 const LS = {
@@ -253,7 +253,8 @@ function updateHeader() {
 
 function renderChecklist() {
   updateHeader();
-  const isLog = state.section === 'log';
+  // ΚΑΘΑΡΙΟΤΗΤΕΣ / ΑΠΟΨΥΞΕΙΣ και ΕΚΚΡΕΜΟΤΗΤΕΣ φαίνονται στην ίδια περιοχή.
+  const isLog = state.section === 'log' || state.section === 'todo';
   const rows = isLog ? [] : buildRows(state.section, currentStore());
   const prog = isLog ? {} : getProg();
   const chosen = !!SECTIONS[state.section];
@@ -261,14 +262,14 @@ function renderChecklist() {
   $('log-view').hidden = !isLog;
   $('items').replaceChildren(...(chosen
     ? rows.map((r, i) => rowEl(r, i + 1, prog))
-    : [h('li', { class: 'pick-hint' }, 'Επίλεξε «ΑΝΟΙΓΜΑ», «ΚΛΕΙΣΙΜΟ» ή «ΚΑΘΑΡΙΟΤΗΤΕΣ / ΑΠΟΨΥΞΕΙΣ».')]));
+    : [h('li', { class: 'pick-hint' }, 'Επίλεξε «ΑΝΟΙΓΜΑ», «ΚΛΕΙΣΙΜΟ», «ΚΑΘΑΡΙΟΤΗΤΕΣ / ΑΠΟΨΥΞΕΙΣ» ή «ΕΚΚΡΕΜΟΤΗΤΕΣ».')]));
   $('legend').hidden = !rows.some((r) => r.extra);
   document.querySelector('#view-checklist .progress').hidden = !chosen;
   $('checklist-actions').hidden = !chosen;
   document.querySelectorAll('#section-seg button').forEach((b) => {
     b.setAttribute('aria-pressed', String(b.dataset.section === state.section));
   });
-  renderLogNotice();
+  updateTodoBadge();
   if (isLog) renderLog();
   updateProgress();
   updateArchiveBtn();
@@ -1392,7 +1393,7 @@ async function init() {
   });
   f.name.addEventListener('input', () => { rememberLast(); updateWho(); });
   document.querySelectorAll('#section-seg button').forEach((b) => b.addEventListener('click', () => {
-    if (state.section === 'log' && b.dataset.section !== 'log' && !draftLeaveOk(f.store.value)) return;
+    if (state.section === 'log' && !['log', 'todo'].includes(b.dataset.section) && !draftLeaveOk(f.store.value)) return;
     state.section = b.dataset.section;
     if (state.section === 'log' && state.logMode !== 'archive') state.logMode = 'main';
     renderChecklist();

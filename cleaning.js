@@ -1106,7 +1106,7 @@ function planEditor(sk, setup) {
       class: 'cal-day plan-day' + (on ? ' on' : '') + (mi.dow(d) === 0 || mi.dow(d) === 6 ? ' we' : ''),
       'aria-pressed': String(on),
       onclick: () => toggle(d),
-    }, h('span', { class: 'cal-n' }, d), load[d] ? h('span', { class: 'cal-c' }, `${load[d]} εργ.`) : null));
+    }, h('span', { class: 'cal-n' }, d), load[d] ? h('span', { class: 'cal-c' }, h('b', {}, load[d]), ' ', h('span', { class: 'w' }, load[d] === 1 ? 'εργασία' : 'εργασίες')) : null));
   }
 
   const wins = u ? planWindows(u, days, ed.ym) : [];
@@ -1189,7 +1189,7 @@ function planEditor(sk, setup) {
       status,
       h('p', { class: 'hint' }, '2. Πάτα τις ημέρες που θα γίνει. Ξαναπάτα για να τη βγάλεις.'),
       h('div', { class: 'cal-grid' }, cells),
-      h('button', { type: 'button', class: 'btn ghost', onclick: autoUnit }, 'Αυτόματη πρόταση για αυτό')) : h('p', { class: 'hint' }, 'Δεν υπάρχει εξοπλισμός για αυτό το είδος.'),
+      h('button', { type: 'button', class: 'btn', onclick: autoUnit }, 'Αυτόματη πρόταση για αυτό')) : h('p', { class: 'hint' }, 'Δεν υπάρχει εξοπλισμός για αυτό το είδος.'),
     ed.problems.length ? h('div', { class: 'log-alert' },
       h('div', { class: 'log-alert-title' }, 'Δεν αποθηκεύτηκε: λείπουν ημέρες'),
       h('ul', {}, ed.problems.map((p) => h('li', {}, p)))) : null,

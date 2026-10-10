@@ -448,5 +448,14 @@ dialog textarea { width: 100%; }
 .plan-status .bad { background: var(--no-soft); color: var(--important); }
 .cal-day.plan-day.on { background: var(--ok); border-color: var(--ok); color: #fff; }
 .cal-day.plan-day.on .cal-c { color: #fff; }
+.plan-day .cal-c { font-size: 10px; line-height: 1.15; text-align: center; }
+.plan-day .cal-c b { font-weight: 600; }
+.plan-day .cal-c .w { white-space: nowrap; }
+@media (max-width: 520px) {
+  .planner .cal-grid { gap: 3px; }
+  .cal-day.plan-day { padding: 2px 0; }
+  .plan-day .cal-c { font-size: 9px; letter-spacing: -0.2px; }
+  .plan-day .cal-c b { display: block; }
+}
 .planner .cal-grid { margin-bottom: 10px; }
 .planner .log-alert ul { margin: 6px 0 0; padding-left: 20px; font-size: 14px; }

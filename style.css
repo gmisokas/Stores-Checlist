@@ -352,7 +352,9 @@ dialog textarea { width: 100%; }
 .log .actions { margin-top: 4px; }
 .log-type button { font-size: 15px; }
 
-.log-grid { display: grid; grid-template-columns: minmax(0, 1fr) 70px 56px; gap: 6px 8px; align-items: center; margin-top: 8px; }
+.log-grid { display: grid; grid-template-columns: minmax(0, 1fr) 70px 76px; gap: 6px 8px; align-items: end; margin-top: 8px; }
+.log-col-tick { text-align: center; line-height: 1.2; }
+.log-grid .log-tick { justify-self: center; }
 .log-col { font-size: 13px; color: var(--muted); }
 .log-grid select { width: 100%; min-height: 44px; padding: 8px; border: 1px solid var(--line); border-radius: 8px; background: #fff; color: var(--text); }
 .log-grid select:disabled { background: var(--bg); }

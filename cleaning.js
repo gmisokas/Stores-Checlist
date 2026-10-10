@@ -689,7 +689,7 @@ function logMain(sk, setup) {
     h('div', { class: 'log-grid' },
       h('span', { class: 'log-col' }, 'Εξοπλισμός / χώρος'),
       h('span', { class: 'log-col' }, 'Νο'),
-      h('span', { class: 'log-col' }, 'Έγινε'),
+      h('span', { class: 'log-col log-col-tick' }, 'Αν έγινε, πατήστε'),
       selEq, selNo,
       h('button', { type: 'button', class: 'mark ok log-tick', 'aria-label': 'Έγινε', onclick: tick }, '✓')),
     h('p', { class: 'hint' }, `Ημερομηνία: ${fmtDate(date)} · Υπεύθυνος: `, whoEl()));

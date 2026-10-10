@@ -7,7 +7,7 @@
    ========================================================== */
 
 // Έκδοση της εφαρμογής. Σε κάθε αλλαγή: ίδιος αριθμός εδώ, στο version.json και στα ?v= του index.html.
-const APP_VERSION = '17';
+const APP_VERSION = '18';
 const SECTIONS = { opening: 'Άνοιγμα', closing: 'Κλείσιμο' };
 const GENERAL_ID = '__general';
 const SECTIONS_UPPER = { opening: 'ΑΝΟΙΓΜΑ', closing: 'ΚΛΕΙΣΙΜΟ' };
@@ -946,7 +946,7 @@ function storePwBox(store) {
     h('label', { class: 'field' }, 'Κωδικός αρχείου (δικός σου)', admin),
     h('label', { class: 'field' }, 'Νέος κωδικός υπευθύνου', pw),
     h('button', { type: 'button', class: 'btn', onclick: () => set(false) }, 'Ορισμός κωδικού υπευθύνου'),
-    h('button', { type: 'button', class: 'btn ghost', onclick: () => set(true) }, 'Αφαίρεση κωδικού'),
+    h('button', { type: 'button', class: 'btn danger', onclick: () => set(true) }, 'Αφαίρεση κωδικού'),
     out);
 }
 
@@ -1353,6 +1353,8 @@ async function checkVersion() {
 }
 
 async function init() {
+  // Στο iPhone (Safari) χρειάζεται για να φαίνεται το «πάτημα» στα κουμπιά.
+  document.addEventListener('touchstart', () => {}, { passive: true });
   checkVersion();
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') checkVersion(); });
   f.date = $('f-date');

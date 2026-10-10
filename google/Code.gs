@@ -426,7 +426,9 @@ function checkStore(equipment, setup, entries, ym, asOf) {
     Object.keys(TYPES).forEach((type) => {
       const rule = eq[type];
       if (!rule || !(rule.min > 0)) return;
-      const n = Math.min(10, Math.max(0, parseInt((setup.counts || {})[eq.id], 10) || 0));
+      // Ίδιο με την εφαρμογή: είδος χωρίς Νο που λείπει από τη δήλωση θεωρείται ότι υπάρχει.
+      const raw = (setup.counts || {})[eq.id];
+      const n = raw === undefined ? (eq.numbered ? 0 : 1) : Math.min(10, Math.max(0, parseInt(raw, 10) || 0));
       if (!n) return;
       const nos = eq.numbered ? Array.from({ length: n }, (_, i) => i + 1) : [0];
       const wins = rule.per === 'month' ? [[1, dim]] : [[1, 7], [8, 14], [15, 21], [22, dim]];

@@ -12,7 +12,7 @@
   <link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
   <link rel="icon" type="image/png" href="assets/favicon.png">
   <title>Lartecono Stores Checklist</title>
-  <link rel="stylesheet" href="style.css?v=20">
+  <link rel="stylesheet" href="style.css?v=21">
 </head>
 <body>
   <div id="app">
@@ -45,14 +45,13 @@
         </label>
       </section>
 
-      <div id="log-notice"></div>
-
       <div class="sticky">
         <div class="pick-label">Επιλέξτε:</div>
-        <div id="section-seg" class="seg seg3" role="group" aria-label="Ενότητα">
+        <div id="section-seg" class="seg seg4" role="group" aria-label="Ενότητα">
           <button type="button" data-section="opening">ΑΝΟΙΓΜΑ</button>
           <button type="button" data-section="closing">ΚΛΕΙΣΙΜΟ</button>
           <button type="button" data-section="log">ΚΑΘΑΡΙΟΤΗΤΕΣ&nbsp;/ ΑΠΟΨΥΞΕΙΣ</button>
+          <button type="button" data-section="todo">ΕΚΚΡΕΜΟΤΗΤΕΣ <span id="todo-badge" class="badge" hidden></span></button>
         </div>
         <div class="progress">
           <div class="bar"><div id="bar-fill"></div></div>
@@ -136,7 +135,7 @@
 
   <div id="toast" class="toast" hidden></div>
 
-  <script src="cleaning.js?v=20"></script>
-  <script src="app.js?v=20"></script>
+  <script src="cleaning.js?v=21"></script>
+  <script src="app.js?v=21"></script>
 </body>
 </html>

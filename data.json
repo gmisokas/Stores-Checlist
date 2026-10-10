@@ -740,6 +740,14 @@
           "min": 1,
           "per": "week"
         }
+      },
+      {
+        "id": "kadoi",
+        "name": "Κάδοι",
+        "clean": {
+          "min": 1,
+          "per": "month"
+        }
       }
     ]
   }

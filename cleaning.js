@@ -47,6 +47,7 @@ const DEFAULT_EQUIPMENT = [
   { id: 'toixoi', name: 'Τοίχοι', clean: { min: 1, per: 'month' } },
   { id: 'portes', name: 'Πόρτες', clean: { min: 1, per: 'week' } },
   { id: 'pezodromio', name: 'Πεζοδρόμιο', clean: { min: 1, per: 'week' } },
+  { id: 'kadoi', name: 'Κάδοι', clean: { min: 1, per: 'month' } },
 ];
 
 /* ---------- Ρυθμίσεις (data.json) ---------- */
@@ -216,10 +217,18 @@ function queueAdd(op) {
 }
 function pendingOf(sk) { return queueGet().filter((o) => o.store === sk); }
 
+// Πόσα από ένα είδος έχει το κατάστημα. Χώρος/εξοπλισμός χωρίς Νο που προστέθηκε αργότερα
+// στη λίστα (δεν υπάρχει στη δήλωση) θεωρείται ότι υπάρχει, όπως και στη φόρμα δήλωσης.
+function countOf(counts, eq) {
+  const raw = (counts || {})[eq.id];
+  if (raw === undefined) return eq.numbered ? 0 : 1;
+  return Math.min(10, Math.max(0, parseInt(raw, 10) || 0));
+}
+
 function equipSummary(setup) {
   return state.data.cleaning.equipment
-    .filter((eq) => (parseInt(setup.counts[eq.id], 10) || 0) > 0)
-    .map((eq) => (eq.numbered ? `${eq.name} ×${parseInt(setup.counts[eq.id], 10)}` : eq.name))
+    .filter((eq) => countOf(setup.counts, eq) > 0)
+    .map((eq) => (eq.numbered ? `${eq.name} ×${countOf(setup.counts, eq)}` : eq.name))
     .join(', ');
 }
 function addOp(sk, e) {
@@ -385,7 +394,7 @@ function logUnits(counts, type) {
   state.data.cleaning.equipment.forEach((eq) => {
     const rule = eq[type];
     if (!rule || !(rule.min > 0)) return;
-    const n = Math.min(10, Math.max(0, parseInt(counts[eq.id], 10) || 0));
+    const n = countOf(counts, eq);
     if (!n) return;
     const nos = eq.numbered ? Array.from({ length: n }, (_, i) => i + 1) : [0];
     nos.forEach((no) => out.push({ eq, no, rule, key: eq.id + '#' + no, label: unitLabel(eq, no) }));
@@ -644,7 +653,7 @@ function logMain(sk, setup) {
     h('button', { type: 'button', 'aria-pressed': String(k === type), onclick: () => { state.logType = k; renderLog(); } }, label)));
 
   // Καταχώρηση: εξοπλισμός/χώρος, Νο, τικ.
-  const eqs = state.data.cleaning.equipment.filter((eq) => eq[type] && (parseInt(setup.counts[eq.id], 10) || 0) > 0);
+  const eqs = state.data.cleaning.equipment.filter((eq) => eq[type] && countOf(setup.counts, eq) > 0);
   // Η επιλογή κρατιέται αν η οθόνη ξαναχτιστεί (π.χ. μετά από συγχρονισμό).
   const sel = state.logSel && state.logSel.type === type && state.logSel.sk === sk ? state.logSel : { sk, type, eq: '', no: '' };
   state.logSel = sel;
@@ -656,7 +665,7 @@ function logMain(sk, setup) {
   const fillNo = () => {
     const eq = eqs.find((x) => x.id === selEq.value);
     if (eq && eq.numbered) {
-      const n = Math.min(10, parseInt(setup.counts[eq.id], 10) || 0);
+      const n = countOf(setup.counts, eq);
       selNo.replaceChildren(h('option', { value: '' }, '–'),
         ...Array.from({ length: n }, (_, i) => h('option', { value: String(i + 1) }, String(i + 1))));
       selNo.disabled = false;
@@ -1007,7 +1016,7 @@ function setupForm(sk, setup) {
   const all = state.data.cleaning.equipment;
   const counts = {};
   all.forEach((eq) => {
-    counts[eq.id] = setup ? parseInt(setup.counts[eq.id], 10) || 0 : (eq.numbered ? 0 : 1);
+    counts[eq.id] = setup ? countOf(setup.counts, eq) : (eq.numbered ? 0 : 1);
   });
 
   const save = () => {
@@ -1269,7 +1278,8 @@ function archiveView(sk, src, head) {
 function openLogExport(sk, ymDefault, src, months) {
   const setup = src.equip;
   if (!setup) return;
-  const counts = Object.assign({}, setup.counts);
+  const counts = {};
+  state.data.cleaning.equipment.forEach((eq) => { counts[eq.id] = countOf(setup.counts, eq); });
   const all = state.data.cleaning.equipment;
   const dlg = $('log-dialog');
   const selMonth = h('select', { value: ymDefault, disabled: !months },
@@ -1295,7 +1305,7 @@ function openLogExport(sk, ymDefault, src, months) {
     all.filter((eq) => eq.numbered).map((eq) => h('label', { class: 'eq-row' },
       h('span', {}, eq.name),
       h('select', {
-        value: String(parseInt(counts[eq.id], 10) || 0),
+        value: String(counts[eq.id]),
         onchange: (e) => { counts[eq.id] = Number(e.target.value); },
       }, Array.from({ length: 11 }, (_, i) => h('option', { value: String(i) }, String(i)))))),
     all.filter((eq) => !eq.numbered).map((eq) => h('label', { class: 'chk-row' },

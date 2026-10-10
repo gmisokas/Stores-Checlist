@@ -7,7 +7,7 @@
    ========================================================== */
 
 // Έκδοση της εφαρμογής. Σε κάθε αλλαγή: ίδιος αριθμός εδώ, στο version.json και στα ?v= του index.html.
-const APP_VERSION = '13';
+const APP_VERSION = '14';
 const SECTIONS = { opening: 'Άνοιγμα', closing: 'Κλείσιμο' };
 const GENERAL_ID = '__general';
 const SECTIONS_UPPER = { opening: 'ΑΝΟΙΓΜΑ', closing: 'ΚΛΕΙΣΙΜΟ' };

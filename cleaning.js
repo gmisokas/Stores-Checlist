@@ -1170,6 +1170,18 @@ function planEditor(sk, setup) {
     rerender();
   };
 
+  // Άδειο ημερολόγιο (και τα δύο είδη) για να ξεκινήσει από την αρχή.
+  const clearAll = () => {
+    if (!confirm(`Να αφαιρεθούν όλες οι εργασίες του ${monthLabel(ed.ym)} (γενική καθαριότητα και αποψύξεις, για όλο τον εξοπλισμό);\n\nΔεν αποθηκεύεται τίποτα μέχρι να πατήσεις «Αποθήκευση προγράμματος».`)) return;
+    Object.keys(LOG_TYPES).forEach((type) => {
+      Object.keys(ed.plan[type]).forEach((key) => { ed.plan[type][key] = []; });
+    });
+    ed.dirty = true;
+    ed.problems = [];
+    rerender();
+    toast('Αφαιρέθηκαν όλες οι εργασίες του μήνα. Πάτα τις ημέρες που θέλεις.', 5000);
+  };
+
   const back = () => {
     if (ed.dirty && !confirm('Υπάρχουν αλλαγές που δεν αποθηκεύτηκαν. Να χαθούν;')) return;
     state.planEdit = null;
@@ -1189,13 +1201,14 @@ function planEditor(sk, setup) {
       status,
       h('p', { class: 'hint' }, '2. Πάτα τις ημέρες που θα γίνει. Ξαναπάτα για να τη βγάλεις.'),
       h('div', { class: 'cal-grid' }, cells),
-      h('button', { type: 'button', class: 'btn', onclick: autoUnit }, 'Αυτόματη πρόταση για αυτό')) : h('p', { class: 'hint' }, 'Δεν υπάρχει εξοπλισμός για αυτό το είδος.'),
+      h('button', { type: 'button', class: 'btn auto', onclick: autoUnit }, '⚡ Αυτόματη κατανομή')) : h('p', { class: 'hint' }, 'Δεν υπάρχει εξοπλισμός για αυτό το είδος.'),
     ed.problems.length ? h('div', { class: 'log-alert' },
       h('div', { class: 'log-alert-title' }, 'Δεν αποθηκεύτηκε: λείπουν ημέρες'),
       h('ul', {}, ed.problems.map((p) => h('li', {}, p)))) : null,
     h('section', { class: 'actions' },
       h('button', { type: 'button', class: 'btn dark', onclick: (e) => save(e.currentTarget) }, 'Αποθήκευση προγράμματος'),
       h('button', { type: 'button', class: 'btn', onclick: copyPrev }, 'Αντιγραφή από τον προηγούμενο μήνα'),
+      h('button', { type: 'button', class: 'btn danger', onclick: clearAll }, 'Αφαίρεση όλων των εργασιών'),
       h('button', { type: 'button', class: 'btn ghost', onclick: back }, 'Πίσω')));
 }
 

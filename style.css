@@ -211,7 +211,9 @@ button, input, select, textarea { font: inherit; color: inherit; }
 }
 .btn.primary { background: #4d80ee; border-color: #4d80ee; color: #fff; }
 .btn.dark { background: var(--brand); color: #fff; }
-.btn.ghost { border-color: var(--line); color: var(--muted); }
+.btn.ghost { border-color: var(--brand); color: var(--brand); }
+/* «Αυτόματη κατανομή»: πιο ζωντανό κουμπί. */
+.btn.auto { background: linear-gradient(135deg, #4d80ee, #6a5cf0); border-color: transparent; color: #fff; box-shadow: 0 3px 10px rgba(77, 128, 238, .35); }
 .btn.danger { border-color: var(--no); color: var(--no); }
 .btn:disabled { opacity: .5; }
 
@@ -459,3 +461,11 @@ dialog textarea { width: 100%; }
 }
 .planner .cal-grid { margin-bottom: 10px; }
 .planner .log-alert ul { margin: 6px 0 0; padding-left: 20px; font-size: 14px; }
+
+/* Animation πατήματος σε όλα τα κουμπιά */
+button, .btn, a.btn { -webkit-tap-highlight-color: transparent; transition: transform .1s ease, filter .1s ease, box-shadow .1s ease; }
+button:not(:disabled):active, a.btn:not([aria-disabled="true"]):active { transform: scale(.95); filter: brightness(.9); }
+@media (prefers-reduced-motion: reduce) {
+  button, .btn, a.btn { transition: none; }
+  button:not(:disabled):active, a.btn:active { transform: none; }
+}

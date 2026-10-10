@@ -15,7 +15,7 @@ const LOG_TITLES = { clean: 'Αρχείο γενικών καθαριοτήτω�
 const LOG_LS = {
   equip: 'cl-equip:', log: 'cl-log:', seen: 'cl-log-seen:', unlocked: 'cl-log-unlocked',
   queue: 'cl-log-queue', synced: 'cl-log-synced:',
-  draft: 'cl-log-draft:', saved: 'cl-log-saved:',
+  draft: 'cl-log-draft:', saved: 'cl-log-saved:', plan: 'cl-plan:',
 };
 // Διεύθυνση της εφαρμογής ιστού του Google Apps Script (…/exec). Το localhost μόνο για δοκιμές.
 const SYNC_URL_RE = /^(https:\/\/script\.google\.com\/(macros|a\/macros\/[^/]+)\/s\/[\w-]+\/exec|http:\/\/(localhost|127\.0\.0\.1)(:\d+)?\/[\w/-]*)$/;
@@ -138,12 +138,16 @@ function storeNameOf(sk) {
 }
 
 // Δεδομένα ενός καταστήματος: από τη συσκευή ή, μέσα στο Αρχείο, από το κοινό αρχείο.
-function deviceSrc(sk) { return { equip: getEquip(sk), entries: getLog(sk) }; }
+function deviceSrc(sk) { return { equip: getEquip(sk), entries: getLog(sk), plans: getPlans(sk) }; }
 function archiveSrc(sk) {
   if (!state.archive) return deviceSrc(sk);
   const a = state.archive.stores[sk] || {};
-  return { equip: a.equip || null, entries: a.entries || [], checklists: a.checklists || [] };
+  return { equip: a.equip || null, entries: a.entries || [], checklists: a.checklists || [], plans: a.plans || {} };
 }
+
+// Πρόγραμμα μήνα του καταστήματος (από τον/την υπεύθυνο): { 'YYYY-MM': { clean: {key: [ημέρες]}, defrost: {…} } }.
+function getPlans(sk) { return lsGet(LOG_LS.plan + sk, {}); }
+function setPlans(sk, map) { if (Object.keys(map).length) lsSet(LOG_LS.plan + sk, map); else lsDel(LOG_LS.plan + sk); }
 
 // Checklists ανοίγματος/κλεισίματος που στάλθηκαν στο αρχείο: σε πόσες ημέρες του μήνα.
 function checklistDays(src, ym) {
@@ -306,6 +310,10 @@ function mergeStore(sk, res, from, pending) {
   const ids = new Set(server.map((e) => e.id));
   const adds = pending.filter((o) => o.op === 'add' && !ids.has(o.e.id) && !dels.has(o.e.id)).map((o) => o.e);
   setLog(sk, [...getLog(sk).filter((e) => e.d < from), ...server, ...adds]);
+  if (res.plans) {
+    const keep = Object.fromEntries(Object.entries(getPlans(sk)).filter(([ym]) => ym < from.slice(0, 7)));
+    setPlans(sk, Object.assign(keep, res.plans));
+  }
 }
 
 function afterSync(sk, changed) {
@@ -429,7 +437,28 @@ function weeklyDays(units) {
 }
 
 // Προτεινόμενες ημερομηνίες του μήνα: [{u, day, w, k}]. w = εβδομάδα ελέγχου, k = σειρά μέσα σε αυτή.
-function planMonth(ym, type, counts) {
+// plans: πρόγραμμα του υπευθύνου ({ym: {clean, defrost}}). Ό,τι έχει ορίσει αντικαθιστά την αυτόματη πρόταση.
+function planMonth(ym, type, counts, plans) {
+  const auto = autoPlan(ym, type, counts);
+  const custom = plans && plans[ym] && plans[ym][type];
+  if (!custom) return auto;
+  const mi = monthInfo(ym);
+  const tasks = auto.filter((t) => !custom[t.u.key]);
+  logUnits(counts, type).forEach((u) => {
+    const days = custom[u.key];
+    if (!days) return;
+    const wins = logWindows(u.rule, mi.dim);
+    const rank = wins.map(() => 0);
+    days.filter((d) => d >= 1 && d <= mi.dim).sort((a, b) => a - b).forEach((day) => {
+      const w = wins.findIndex(([a, b]) => day >= a && day <= b);
+      rank[w]++;
+      tasks.push({ u, day, w, k: rank[w] });
+    });
+  });
+  return tasks;
+}
+
+function autoPlan(ym, type, counts) {
   const mi = monthInfo(ym);
   const units = logUnits(counts, type);
   const wk = weeklyDays(units);
@@ -611,6 +640,8 @@ function renderLog() {
     if (!isSynced(sk)) { view.replaceChildren(waitBox(sk)); return; }
   }
   const setup = getEquip(sk);
+  if (setup && state.logMode === 'planUnlock') { view.replaceChildren(planUnlockForm(sk)); return; }
+  if (setup && state.logMode === 'plan' && state.planEdit && state.planEdit.sk === sk) { view.replaceChildren(planEditor(sk, setup)); return; }
   view.replaceChildren(!setup || state.logMode === 'setup' ? setupForm(sk, setup) : logMain(sk, setup));
   updateSaveStatus();
 }
@@ -633,7 +664,7 @@ function logMain(sk, setup) {
   const day = Number(date.slice(8));
   const all = getLog(sk);
   const monthEntries = all.filter((e) => ymOf(e.d) === ym);
-  const tasks = markDone(planMonth(ym, type, setup.counts), monthEntries, type, ym);
+  const tasks = markDone(planMonth(ym, type, setup.counts, getPlans(sk)), monthEntries, type, ym);
   const since = setup.since || '';
 
   // Υπενθύμιση στο τέλος του μήνα.
@@ -751,6 +782,7 @@ function logMain(sk, setup) {
       h('button', { type: 'button', class: 'btn primary', onclick: () => logViber(sk) }, 'Αποστολή στο Viber'),
       h('button', { type: 'button', class: 'btn', onclick: () => openLogExport(sk, ym, deviceSrc(sk), shared() ? 2 : 13) }, 'Αποθήκευση σε Excel'),
       h('button', { type: 'button', class: 'btn', onclick: () => { state.logMode = 'setup'; renderLog(); scrollToLog(); } }, 'Εξοπλισμός καταστήματος'),
+      shared() ? h('button', { type: 'button', class: 'btn', onclick: () => openPlanner(sk) }, '📅 Πρόγραμμα μήνα (υπεύθυνος)') : null,
       h('button', { type: 'button', class: 'btn ghost', onclick: () => openArchive() }, '🔒 Αρχείο (με κωδικό)')));
 }
 
@@ -904,7 +936,7 @@ function logSummaryText(sk) {
   if (setup) {
     const monthEntries = all.filter((e) => ymOf(e.d) === ym);
     Object.keys(LOG_TYPES).forEach((type) => {
-      markDone(planMonth(ym, type, setup.counts), monthEntries, type, ym)
+      markDone(planMonth(ym, type, setup.counts, getPlans(sk)), monthEntries, type, ym)
         .filter((t) => t.day === day && !t.done)
         .forEach((t) => left.push(`• ${t.u.label} – ${LOG_TYPES[type]}`));
     });
@@ -943,13 +975,239 @@ function draftLeaveOk(sk) {
   return confirm(`Έχεις ${n} τικ καθαριοτήτων/αποψύξεων που ΔΕΝ αποθηκεύτηκαν στο αρχείο.\n\nΠάτα «Άκυρο» για να γυρίσεις και να πατήσεις «Αποθήκευση στο αρχείο».\nΑν συνεχίσεις, τα τικ μένουν στη λίστα για αργότερα.`);
 }
 
+/* ---- Πρόγραμμα μήνα: ο/η υπεύθυνος ορίζει ημέρες ανά εξοπλισμό ---- */
+
+function openPlanner(sk) {
+  if (!shared()) { toast('Το πρόγραμμα μήνα χρειάζεται σύνδεση με το κοινό αρχείο (Διαχείριση → Καθαριότητες).', 6000); return; }
+  state.logMode = state.planPw && state.planPwStore === sk ? 'plan' : 'planUnlock';
+  if (state.logMode === 'plan') state.planEdit = initPlanEdit(sk, ymOf(f.date.value || todayISO()));
+  renderLog();
+  scrollToLog();
+}
+
+function planUnlockForm(sk) {
+  const pw = h('input', { type: 'password', autocomplete: 'current-password', placeholder: 'Κωδικός υπευθύνου' });
+  const btn = h('button', { type: 'submit', class: 'btn dark' }, 'Είσοδος');
+  const go = async (e) => {
+    e.preventDefault();
+    btn.disabled = true;
+    try {
+      await apiCall({ action: 'checkPlanPw', store: sk, pw: pw.value });
+    } catch (x) {
+      const m = String((x && x.message) || x);
+      toast(m === 'unknown-action' ? 'Το Google Script χρειάζεται ενημέρωση (οδηγίες στο README).' : m === 'no-password' ? 'Δεν έχει οριστεί κωδικός υπευθύνου. Ορίζεται στη Διαχείριση → Καταστήματα.' : apiMsg(x), 6000);
+      btn.disabled = false;
+      pw.value = '';
+      pw.focus();
+      return;
+    }
+    state.planPw = pw.value;
+    state.planPwStore = sk;
+    state.planEdit = initPlanEdit(sk, ymOf(f.date.value || todayISO()));
+    state.logMode = 'plan';
+    renderLog();
+  };
+  setTimeout(() => pw.focus(), 0);
+  return h('div', { class: 'log' }, h('form', { class: 'box', onsubmit: go },
+    h('h2', {}, `📅 Πρόγραμμα μήνα – ${storeLabel()}`),
+    h('p', { class: 'hint' }, 'Μόνο για τον/την υπεύθυνο καταστήματος.'),
+    h('label', { class: 'field' }, 'Κωδικός υπευθύνου', pw),
+    h('div', { class: 'stack' },
+      btn,
+      h('button', { type: 'button', class: 'btn ghost', onclick: () => { state.logMode = 'main'; renderLog(); } }, 'Πίσω'))));
+}
+
+// Αρχικό πρόγραμμα: ό,τι έχει αποθηκευτεί, αλλιώς η αυτόματη πρόταση της εφαρμογής.
+function initPlanEdit(sk, ym) {
+  const setup = getEquip(sk);
+  const saved = getPlans(sk)[ym] || {};
+  const plan = {};
+  Object.keys(LOG_TYPES).forEach((type) => {
+    plan[type] = {};
+    const auto = autoPlan(ym, type, setup.counts);
+    logUnits(setup.counts, type).forEach((u) => {
+      const own = saved[type] && saved[type][u.key];
+      plan[type][u.key] = own ? own.slice() : auto.filter((t) => t.u.key === u.key).map((t) => t.day).sort((a, b) => a - b);
+    });
+  });
+  const first = logUnits(setup.counts, 'clean')[0];
+  return { sk, ym, plan, type: 'clean', key: first ? first.key : '', dirty: false, saved: !!getPlans(sk)[ym], problems: [] };
+}
+
+// Πόσες φορές μπήκαν σε κάθε εβδομάδα/μήνα σε σχέση με όσες ορίζονται.
+function planWindows(u, days, ym) {
+  const mi = monthInfo(ym);
+  return logWindows(u.rule, mi.dim).map(([a, b]) => {
+    const n = days.filter((d) => d >= a && d <= b).length;
+    return { a, b, n, req: u.rule.min, ok: n >= u.rule.min };
+  });
+}
+
+function planProblems(ed, counts) {
+  const out = [];
+  Object.keys(LOG_TYPES).forEach((type) => {
+    logUnits(counts, type).forEach((u) => {
+      planWindows(u, ed.plan[type][u.key] || [], ed.ym).filter((w) => !w.ok).forEach((w) => {
+        out.push(`${LOG_TYPES[type]} · ${u.label} – ${u.rule.per === 'month' ? 'μήνας' : `εβδομάδα ${w.a}–${w.b}`}: ${w.n} από ${w.req}`);
+      });
+    });
+  });
+  return out;
+}
+
+function planEditor(sk, setup) {
+  const ed = state.planEdit;
+  const mi = monthInfo(ed.ym);
+  const units = logUnits(setup.counts, ed.type);
+  if (!units.some((u) => u.key === ed.key)) ed.key = units[0] ? units[0].key : '';
+  const u = units.find((x) => x.key === ed.key);
+  const days = u ? ed.plan[ed.type][u.key] || [] : [];
+  const unitOk = (x) => planWindows(x, ed.plan[ed.type][x.key] || [], ed.ym).every((w) => w.ok);
+  const rerender = () => renderLog();
+
+  const now = ymOf(todayISO());
+  const months = [now, addMonths(now, 1), addMonths(now, 2)];
+  if (!months.includes(ed.ym)) months.unshift(ed.ym);
+  const selMonth = h('select', {
+    value: ed.ym,
+    onchange: (e) => {
+      if (ed.dirty && !confirm('Υπάρχουν αλλαγές που δεν αποθηκεύτηκαν. Να χαθούν;')) { e.target.value = ed.ym; return; }
+      state.planEdit = Object.assign(initPlanEdit(sk, e.target.value), { type: ed.type });
+      rerender();
+    },
+  }, months.map((ym) => h('option', { value: ym }, monthLabel(ym))));
+
+  const typeSeg = h('div', { class: 'seg log-type' }, Object.entries(LOG_TYPES).map(([k, label]) =>
+    h('button', { type: 'button', 'aria-pressed': String(k === ed.type), onclick: () => { ed.type = k; ed.key = ''; rerender(); } }, label)));
+
+  const selUnit = h('select', { value: ed.key, onchange: (e) => { ed.key = e.target.value; rerender(); } },
+    units.map((x) => h('option', { value: x.key }, `${unitOk(x) ? '✓' : '⚠️'} ${x.label}`)));
+
+  const toggle = (d) => {
+    const list = ed.plan[ed.type][u.key] || [];
+    const i = list.indexOf(d);
+    if (i >= 0) list.splice(i, 1); else list.push(d);
+    list.sort((a, b) => a - b);
+    ed.plan[ed.type][u.key] = list;
+    ed.dirty = true;
+    ed.problems = [];
+    rerender();
+  };
+
+  // Πόσες εργασίες έχει κάθε ημέρα (όλος ο εξοπλισμός του είδους), για να μοιράζονται σωστά.
+  const load = {};
+  units.forEach((x) => (ed.plan[ed.type][x.key] || []).forEach((d) => { load[d] = (load[d] || 0) + 1; }));
+  const cells = ['Δευ', 'Τρι', 'Τετ', 'Πεμ', 'Παρ', 'Σαβ', 'Κυρ'].map((d) => h('div', { class: 'cal-h' }, d));
+  for (let i = 0; i < (mi.dow(1) + 6) % 7; i++) cells.push(h('div', {}));
+  for (let d = 1; d <= mi.dim; d++) {
+    const on = days.includes(d);
+    cells.push(h('button', {
+      type: 'button',
+      class: 'cal-day plan-day' + (on ? ' on' : '') + (mi.dow(d) === 0 || mi.dow(d) === 6 ? ' we' : ''),
+      'aria-pressed': String(on),
+      onclick: () => toggle(d),
+    }, h('span', { class: 'cal-n' }, d), load[d] ? h('span', { class: 'cal-c' }, `${load[d]} εργ.`) : null));
+  }
+
+  const wins = u ? planWindows(u, days, ed.ym) : [];
+  const status = u ? h('div', { class: 'plan-status' }, wins.map((w) => h('span', { class: w.ok ? 'ok' : 'bad' },
+    `${u.rule.per === 'month' ? 'Μήνας' : `${w.a}–${w.b}`}: ${w.n}/${w.req} ${w.ok ? '✓' : '✗'}`))) : null;
+
+  const autoUnit = () => {
+    ed.plan[ed.type][u.key] = autoPlan(ed.ym, ed.type, setup.counts).filter((t) => t.u.key === u.key).map((t) => t.day).sort((a, b) => a - b);
+    ed.dirty = true;
+    rerender();
+  };
+
+  // Ίδιες ημέρες της εβδομάδας (εβδομαδιαίες) ή ίδιες ημερομηνίες (μηνιαίες) με τον προηγούμενο μήνα.
+  const copyPrev = () => {
+    const prevYm = addMonths(ed.ym, -1);
+    const pmi = monthInfo(prevYm);
+    const prev = getPlans(sk)[prevYm];
+    if (!confirm(`Να αντιγραφεί το πρόγραμμα του ${monthLabel(prevYm)}${prev ? '' : ' (αυτόματη πρόταση, δεν είχε αποθηκευτεί πρόγραμμα)'}; Θα αντικαταστήσει όλο το τρέχον.`)) return;
+    Object.keys(LOG_TYPES).forEach((type) => {
+      const autoPrev = autoPlan(prevYm, type, setup.counts);
+      logUnits(setup.counts, type).forEach((x) => {
+        const pd = (prev && prev[type] && prev[type][x.key]) || autoPrev.filter((t) => t.u.key === x.key).map((t) => t.day);
+        let nd;
+        if (x.rule.per === 'month') nd = pd.map((d) => Math.min(d, mi.dim));
+        else {
+          const wds = new Set(pd.map((d) => pmi.dow(d)));
+          nd = [];
+          for (let d = 1; d <= mi.dim; d++) if (wds.has(mi.dow(d))) nd.push(d);
+        }
+        ed.plan[type][x.key] = [...new Set(nd)].sort((a, b) => a - b);
+      });
+    });
+    ed.dirty = true;
+    ed.problems = [];
+    rerender();
+  };
+
+  const save = async (btn) => {
+    const problems = planProblems(ed, setup.counts);
+    if (problems.length) {
+      ed.problems = problems;
+      rerender();
+      toast('Το πρόγραμμα δεν καλύπτει τις οδηγίες. Δες τι λείπει.', 5000);
+      return;
+    }
+    btn.disabled = true;
+    btn.textContent = 'Αποθήκευση…';
+    try {
+      await apiCall({ action: 'savePlan', store: sk, storeName: storeLabel(), month: ed.ym, plan: ed.plan, by: f.name.value.trim(), pw: state.planPw });
+    } catch (x) {
+      const m = String((x && x.message) || x);
+      toast(m === 'unknown-action' ? 'Το Google Script χρειάζεται ενημέρωση (οδηγίες στο README).' : apiMsg(x), 6000);
+      btn.disabled = false;
+      btn.textContent = 'Αποθήκευση προγράμματος';
+      return;
+    }
+    setPlans(sk, Object.assign(getPlans(sk), { [ed.ym]: JSON.parse(JSON.stringify(ed.plan)) }));
+    ed.dirty = false;
+    ed.saved = true;
+    toast(`✓ Το πρόγραμμα του ${monthLabel(ed.ym)} αποθηκεύτηκε. Το βλέπουν όλα τα κινητά του καταστήματος.`, 6000);
+    rerender();
+  };
+
+  const back = () => {
+    if (ed.dirty && !confirm('Υπάρχουν αλλαγές που δεν αποθηκεύτηκαν. Να χαθούν;')) return;
+    state.planEdit = null;
+    state.logMode = 'main';
+    renderLog();
+  };
+
+  return h('div', { class: 'log planner' },
+    h('div', { class: 'box' },
+      h('h2', {}, `📅 Πρόγραμμα μήνα – ${storeLabel()}`),
+      h('label', { class: 'field' }, 'Μήνας', selMonth),
+      h('p', { class: 'hint' }, ed.saved ? 'Υπάρχει αποθηκευμένο πρόγραμμα για αυτόν τον μήνα.' : 'Δεν έχει αποθηκευτεί πρόγραμμα: φαίνεται η αυτόματη πρόταση της εφαρμογής.')),
+    typeSeg,
+    units.length ? h('div', { class: 'box' },
+      h('label', { class: 'field' }, '1. Διάλεξε εξοπλισμό / χώρο', selUnit),
+      h('p', { class: 'plan-rule' }, `${LOG_TYPES[ed.type]} · ${freqText(u.rule)}`),
+      status,
+      h('p', { class: 'hint' }, '2. Πάτα τις ημέρες που θα γίνει. Ξαναπάτα για να τη βγάλεις.'),
+      h('div', { class: 'cal-grid' }, cells),
+      h('button', { type: 'button', class: 'btn ghost', onclick: autoUnit }, 'Αυτόματη πρόταση για αυτό')) : h('p', { class: 'hint' }, 'Δεν υπάρχει εξοπλισμός για αυτό το είδος.'),
+    ed.problems.length ? h('div', { class: 'log-alert' },
+      h('div', { class: 'log-alert-title' }, 'Δεν αποθηκεύτηκε: λείπουν ημέρες'),
+      h('ul', {}, ed.problems.map((p) => h('li', {}, p)))) : null,
+    h('section', { class: 'actions' },
+      h('button', { type: 'button', class: 'btn dark', onclick: (e) => save(e.currentTarget) }, 'Αποθήκευση προγράμματος'),
+      h('button', { type: 'button', class: 'btn', onclick: copyPrev }, 'Αντιγραφή από τον προηγούμενο μήνα'),
+      h('button', { type: 'button', class: 'btn ghost', onclick: back }, 'Πίσω')));
+}
+
 /* ---- Ημερολόγιο μήνα ---- */
 
 function calendarEl(sk, setup, type) {
   const ym = state.logCalMonth || ymOf(f.date.value || todayISO());
   const mi = monthInfo(ym);
   const entries = getLog(sk).filter((e) => ymOf(e.d) === ym);
-  const tasks = markDone(planMonth(ym, type, setup.counts), entries, type, ym);
+  const plans = getPlans(sk);
+  const custom = plans[ym] && plans[ym][type];
+  const tasks = markDone(planMonth(ym, type, setup.counts, plans), entries, type, ym);
   const today = todayISO();
   const since = setup.since || '';
   const byDay = {};
@@ -994,11 +1252,11 @@ function calendarEl(sk, setup, type) {
       ? h('ul', { class: 'tasks' }, selTasks.map((t) => h('li', { class: 'task' + (t.done ? ' done' : '') },
         h('span', { class: 'task-text' }, t.u.label), h('span', { class: t.done ? 'done-tag' : 'todo-tag' }, t.done ? '✓ Έγινε' : '○'))))
       : h('p', { class: 'hint' }, 'Καμία προτεινόμενη εργασία.'),
-    h('h3', {}, 'Σταθερό πρόγραμμα'),
+    h('h3', {}, custom ? 'Πρόγραμμα του υπευθύνου' : 'Σταθερό πρόγραμμα'),
     units.length
       ? h('ul', { class: 'plan-list' }, units.map((u) => {
-        const mine = tasks.filter((t) => t.u.key === u.key).map((t) => t.day);
-        const when = u.rule.per === 'month'
+        const mine = tasks.filter((t) => t.u.key === u.key).map((t) => t.day).sort((a, b) => a - b);
+        const when = u.rule.per === 'month' || (custom && custom[u.key])
           ? `${freqText(u.rule)} · προτείνεται: ${mine.map((d) => d + '/' + ym.slice(5)).join(', ')}`
           : `${freqText(u.rule)} · κάθε ${wk[u.key].map((d) => DAYS_FULL[d]).join(' και ')}`;
         return h('li', {}, h('b', {}, u.label), h('br'), h('small', {}, when));
@@ -1350,7 +1608,7 @@ function logSheetXml(src, sk, ym, type, counts) {
   const setup = src.equip || {};
   const entries = src.entries.filter((e) => ymOf(e.d) === ym && e.t === type);
   const units = logUnits(counts, type);
-  const tasks = planMonth(ym, type, counts);
+  const tasks = planMonth(ym, type, counts, src.plans);
   const sum = unitSummary(checkUnits(units, type, entries, ym, setup.since || '', null));
   const D = 3; // πρώτη στήλη ημερών (D)
   const last = D + mi.dim;

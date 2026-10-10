@@ -7,7 +7,7 @@
    ========================================================== */
 
 // Έκδοση της εφαρμογής. Σε κάθε αλλαγή: ίδιος αριθμός εδώ, στο version.json και στα ?v= του index.html.
-const APP_VERSION = '15';
+const APP_VERSION = '16';
 const SECTIONS = { opening: 'Άνοιγμα', closing: 'Κλείσιμο' };
 const GENERAL_ID = '__general';
 const SECTIONS_UPPER = { opening: 'ΑΝΟΙΓΜΑ', closing: 'ΚΛΕΙΣΙΜΟ' };
@@ -40,6 +40,10 @@ const state = {
   archivePw: '',
   syncTest: '',
   logSaving: false,
+  // Πρόγραμμα μήνα του υπευθύνου
+  planEdit: null,
+  planPw: '',
+  planPwStore: '',
   archSaving: false,
   syncSheetUrl: '',
 };
@@ -906,6 +910,7 @@ function adminStores() {
       class: 'btn',
       onclick: () => { store.contacts.push({ id: newId('p'), name: '', phone: '' }); markDirty(true); },
     }, '+ Προσθήκη υπευθύνου'),
+    shared() ? storePwBox(store) : null,
     h('h2', {}, 'Ιδιαιτερότητες καταστήματος'),
     h('p', { class: 'hint' }, 'Έξτρα γραμμές μόνο για αυτό το κατάστημα. Εμφανίζονται χρωματισμένες, στη θέση που θα διαλέξεις.'),
     h('div', { class: 'ed-list' }, store.extras.map((x) => extraEditor(store, x))),
@@ -913,6 +918,36 @@ function adminStores() {
       h('button', { type: 'button', class: 'btn', onclick: addExtra }, '+ Προσθήκη ιδιαιτερότητας'),
       h('button', { type: 'button', class: 'btn danger', onclick: delStore }, 'Διαγραφή καταστήματος')),
     saveReminder());
+}
+
+// Κωδικός υπευθύνου για το «Πρόγραμμα μήνα» καθαριοτήτων (φυλάσσεται στο Google Script).
+function storePwBox(store) {
+  const admin = h('input', { type: 'password', autocomplete: 'current-password', placeholder: 'Ο δικός σου κωδικός αρχείου' });
+  const pw = h('input', { type: 'text', autocomplete: 'off', placeholder: 'π.χ. 4 ή περισσότερα ψηφία' });
+  const out = h('p', { class: 'hint' });
+  const set = async (remove) => {
+    if (!admin.value) { toast('Γράψε τον κωδικό αρχείου σου.'); admin.focus(); return; }
+    if (!remove && pw.value.trim().length < 4) { toast('Ο κωδικός υπευθύνου θέλει τουλάχιστον 4 χαρακτήρες.'); pw.focus(); return; }
+    if (remove && !confirm(`Να αφαιρεθεί ο κωδικός υπευθύνου για «${store.name}»;`)) return;
+    out.textContent = 'Περίμενε…';
+    try {
+      await apiCall({ action: 'setStorePw', pw: admin.value, store: store.id, newPw: remove ? '' : pw.value.trim() });
+      out.textContent = remove ? '✓ Ο κωδικός αφαιρέθηκε.' : `✓ Ορίστηκε. Δώσε τον κωδικό στον/στην υπεύθυνο του καταστήματος «${store.name}».`;
+      pw.value = '';
+    } catch (e) {
+      const m = String((e && e.message) || e);
+      out.textContent = m === 'password' ? 'Ο κωδικός αρχείου είναι λάθος.' : m === 'unknown-action' ? 'Το Google Script χρειάζεται ενημέρωση (οδηγίες στο README).' : apiMsg(e);
+    }
+  };
+  return h('div', { class: 'box' },
+    h('h2', {}, 'Κωδικός υπευθύνου (Πρόγραμμα μήνα)'),
+    h('p', { class: 'hint' }, 'Με αυτόν τον κωδικό ο/η υπεύθυνος του καταστήματος ορίζει τις ημέρες καθαριοτήτων/αποψύξεων: ΚΑΘΑΡΙΟΤΗΤΕΣ / ΑΠΟΨΥΞΕΙΣ → «📅 Πρόγραμμα μήνα». Ο δικός σου κωδικός αρχείου ανοίγει όλα τα καταστήματα.'),
+    h('p', { class: 'warn' }, 'Μη χρησιμοποιείς κωδικό συναγερμού/POS.'),
+    h('label', { class: 'field' }, 'Κωδικός αρχείου (δικός σου)', admin),
+    h('label', { class: 'field' }, 'Νέος κωδικός υπευθύνου', pw),
+    h('button', { type: 'button', class: 'btn', onclick: () => set(false) }, 'Ορισμός κωδικού υπευθύνου'),
+    h('button', { type: 'button', class: 'btn ghost', onclick: () => set(true) }, 'Αφαίρεση κωδικού'),
+    out);
 }
 
 function generalOptions(selectedId) {

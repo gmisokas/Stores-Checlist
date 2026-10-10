@@ -439,3 +439,14 @@ dialog textarea { width: 100%; }
 .log-save .save-status { margin-top: 8px; }
 .log-entry h3 { margin: 14px 0 4px; }
 .entries.draft li { background: #f6f8fc; }
+
+/* Πρόγραμμα μήνα (υπεύθυνος) */
+.plan-rule { margin: 4px 0; font-weight: 600; color: var(--brand); }
+.plan-status { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0; }
+.plan-status span { padding: 3px 8px; border-radius: 6px; font-size: 13px; font-weight: 600; }
+.plan-status .ok { background: var(--ok-soft); color: #1f6b2a; }
+.plan-status .bad { background: var(--no-soft); color: var(--important); }
+.cal-day.plan-day.on { background: var(--ok); border-color: var(--ok); color: #fff; }
+.cal-day.plan-day.on .cal-c { color: #fff; }
+.planner .cal-grid { margin-bottom: 10px; }
+.planner .log-alert ul { margin: 6px 0 0; padding-left: 20px; font-size: 14px; }

@@ -32,7 +32,9 @@ const SH_CHECK = 'Checklists';
 const CHECK_HEAD = ['Ημερομηνία', 'Κατάστημα', 'Ενότητα', 'Υπεύθυνος', '✓', '✗', 'Χωρίς συμπλήρωση', 'Δεν έγιναν', 'Σημειώσεις', 'Στάλθηκε',
   'key', 'store', 'section', 'at'];
 const SECTIONS = { opening: 'Άνοιγμα', closing: 'Κλείσιμο' };
-const VERSION = 2;
+const SH_PLAN = 'Πρόγραμμα';
+const PLAN_HEAD = ['Κατάστημα', 'Μήνας', 'Αποθηκεύτηκε από', 'Ενημερώθηκε', 'store', 'month', 'plan'];
+const VERSION = 3;
 const TYPES = { clean: 'Γενική καθαριότητα', defrost: 'Απόψυξη' };
 // Θέσεις στηλών (από 0) στο φύλλο «Καταχωρήσεις».
 const C = { d: 0, no: 4, by: 5, id: 7, store: 8, type: 9, eq: 10, at: 11 };
@@ -74,6 +76,10 @@ function run(p) {
       case 'remove': checkPw(p.pw); locked(() => applyOps([{ op: 'del', id: p.id, force: true }])); return { ok: true };
       case 'setPassword': return setPassword(p);
       case 'report': checkPw(p.pw); return reportSettings(p);
+      case 'checkPlanPw': checkStorePw(p.store, p.pw); return { ok: true };
+      case 'savePlan': checkStorePw(p.store, p.pw); return savePlan(p);
+      case 'setStorePw': checkPw(p.pw); return setStorePw(p);
+      case 'storePws': checkPw(p.pw); return { ok: true, stores: storesWithPw() };
       default: return { ok: false, error: 'unknown-action' };
     }
   } catch (err) {
@@ -101,6 +107,30 @@ function checkPw(pw) {
     cache.put('pw-fails', String(fails + 1), 600);
     throw new Error('password');
   }
+}
+
+// Κωδικός υπευθύνου καταστήματος (για το πρόγραμμα μήνα). Δέχεται και τον κωδικό αρχείου.
+function checkStorePw(store, pw) {
+  const sk = code(store);
+  if (!sk) throw new Error('no-store');
+  const own = prop('PW_STORE_' + sk);
+  if (own && pw && hashPw(String(pw)) === own) return;
+  checkPw(pw);
+}
+
+function setStorePw(p) {
+  const sk = code(p.store);
+  if (!sk) throw new Error('no-store');
+  const pw = String(p.newPw || '');
+  if (!pw) { PropertiesService.getScriptProperties().deleteProperty('PW_STORE_' + sk); return { ok: true }; }
+  if (pw.length < 4) throw new Error('short');
+  PropertiesService.getScriptProperties().setProperty('PW_STORE_' + sk, hashPw(pw));
+  return { ok: true };
+}
+
+function storesWithPw() {
+  return Object.keys(PropertiesService.getScriptProperties().getProperties())
+    .filter((k) => k.indexOf('PW_STORE_') === 0).map((k) => k.slice(9));
 }
 
 function setPassword(p) {
@@ -191,7 +221,8 @@ function sync(p) {
   if (!store) throw new Error('no-store');
   const ops = Array.isArray(p.ops) ? p.ops.slice(0, MAX_OPS) : [];
   const results = ops.length ? locked(() => applyOps(ops)) : [];
-  return { ok: true, results, equip: equipOf(store), entries: entriesOf(store, isDay(p.from) ? p.from : '0000-00-00') };
+  const from = isDay(p.from) ? p.from : '0000-00-00';
+  return { ok: true, results, equip: equipOf(store), entries: entriesOf(store, from), plans: plansOf(store, from.slice(0, 7)) };
 }
 
 function entryKey(store, type, eq, no, d) { return [store, type, eq, no, d].join('|'); }
@@ -317,6 +348,48 @@ function toChecklist(r) {
   };
 }
 
+/* ---------- Πρόγραμμα μήνα (από τον/την υπεύθυνο καταστήματος) ---------- */
+
+// plan = { clean: { 'katapsyxi#1': [3, 10, 17, 24], … }, defrost: { … } }
+function cleanPlan(plan) {
+  const out = {};
+  Object.keys(TYPES).forEach((t) => {
+    const src = (plan && plan[t]) || {};
+    out[t] = {};
+    Object.keys(src).slice(0, 300).forEach((key) => {
+      if (!/^[\w-]{1,60}#\d{1,2}$/.test(key) || !Array.isArray(src[key])) return;
+      const days = src[key].map((d) => parseInt(d, 10)).filter((d) => d >= 1 && d <= 31);
+      out[t][key] = days.filter((d, i) => days.indexOf(d) === i).sort((a, b) => a - b);
+    });
+  });
+  return out;
+}
+
+function savePlan(p) {
+  const store = code(p.store);
+  const month = String(p.month || '');
+  if (!store || !/^\d{4}-\d{2}$/.test(month)) throw new Error('bad');
+  const plan = cleanPlan(p.plan);
+  return locked(() => {
+    const sh = sheet(SH_PLAN, PLAN_HEAD, 5);
+    const data = values(sh);
+    let i = data.findIndex((r) => txt(r[4]) === store && txt(r[5]) === month);
+    if (i < 0) i = data.length;
+    writeRows(sh, i + 2, [[clean(p.storeName), month, clean(p.by), stamp(new Date().toISOString()), store, month, JSON.stringify(plan)]], PLAN_HEAD.length);
+    return { ok: true };
+  });
+}
+
+function plansOf(store, fromMonth) {
+  const out = {};
+  values(sheet(SH_PLAN, PLAN_HEAD, 5)).forEach((r) => {
+    if (txt(r[4]) !== store || txt(r[5]) < fromMonth) return;
+    const plan = parseSetup(r[6]);
+    if (plan) out[txt(r[5])] = plan;
+  });
+  return out;
+}
+
 function parseSetup(v) {
   try { return JSON.parse(txt(v)); } catch (e) { return null; }
 }
@@ -342,7 +415,7 @@ function archive(p) {
   const month = /^\d{4}-\d{2}$/.test(String(p.month)) ? String(p.month) : today().slice(0, 7);
   const stores = {};
   const get = (sk, name) => {
-    if (!stores[sk]) stores[sk] = { name: name || '', equip: null, entries: [], checklists: [] };
+    if (!stores[sk]) stores[sk] = { name: name || '', equip: null, entries: [], checklists: [], plans: {} };
     if (name && !stores[sk].name) stores[sk].name = name;
     return stores[sk];
   };
@@ -353,6 +426,11 @@ function archive(p) {
   values(sheet(SH_ENTRIES, ENTRY_HEAD, C.id + 1)).forEach((r) => {
     const sk = txt(r[C.store]);
     if (sk && txt(r[C.d]).slice(0, 7) === month) get(sk, txt(r[1])).entries.push(toEntry(r));
+  });
+  values(sheet(SH_PLAN, PLAN_HEAD, 5)).forEach((r) => {
+    const sk = txt(r[4]);
+    const plan = sk && txt(r[5]) === month ? parseSetup(r[6]) : null;
+    if (plan) get(sk, txt(r[0])).plans[month] = plan;
   });
   values(sheet(SH_CHECK, CHECK_HEAD, 11)).forEach((r) => {
     const sk = txt(r[11]);

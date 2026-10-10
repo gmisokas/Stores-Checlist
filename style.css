@@ -115,7 +115,9 @@ button, input, select, textarea { font: inherit; color: inherit; }
 #view-checklist .seg button[data-section="opening"][aria-pressed="true"] { background: var(--ok); color: #fff; }
 #view-checklist .seg button[data-section="closing"][aria-pressed="true"] { background: var(--no); color: #fff; }
 .seg3 { grid-template-columns: 1fr 1fr 1.25fr; }
-.seg3 button[data-section="log"] { padding: 2px 4px; font-size: 14px; line-height: 1.15; }
+/* Οι τρεις ενότητες με κεφαλαία: ίδιο μέγεθος γραμμάτων και στα τρία κουμπιά. */
+.seg3 button { padding: 2px 4px; font-size: 14px; line-height: 1.15; }
+@media (min-width: 600px) { .seg3 button { font-size: 16px; } }
 
 .progress { margin-top: 10px; }
 .bar { height: 8px; background: var(--line); border-radius: 4px; overflow: hidden; }

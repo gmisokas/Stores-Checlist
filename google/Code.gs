@@ -31,7 +31,7 @@ const EQUIP_HEAD = ['Κατάστημα', 'Εξοπλισμός', 'Δηλώθη�
 const SH_CHECK = 'Checklists';
 const CHECK_HEAD = ['Ημερομηνία', 'Κατάστημα', 'Ενότητα', 'Υπεύθυνος', '✓', '✗', 'Χωρίς συμπλήρωση', 'Δεν έγιναν', 'Σημειώσεις', 'Στάλθηκε',
   'key', 'store', 'section', 'at'];
-const SECTIONS = { opening: 'Άνοιγμα', closing: 'Κλείσιμο' };
+const SECTIONS = { opening: 'ΑΝΟΙΓΜΑ', closing: 'ΚΛΕΙΣΙΜΟ' };
 const SH_PLAN = 'Πρόγραμμα';
 const PLAN_HEAD = ['Κατάστημα', 'Μήνας', 'Αποθηκεύτηκε από', 'Ενημερώθηκε', 'store', 'month', 'plan'];
 const VERSION = 3;
@@ -562,7 +562,7 @@ function buildReport(month, asOf) {
     const cls = st.checklists || [];
     const clCount = (sec) => `${new Set(cls.filter((c) => c.section === sec).map((c) => c.d)).size}/${days}`;
     const clCell = `<td ${td}>${clCount('opening')} · ${clCount('closing')}</td>`;
-    text.push(`${name}: checklists άνοιγμα ${clCount('opening')} · κλείσιμο ${clCount('closing')}`);
+    text.push(`${name}: checklists ΑΝΟΙΓΜΑ ${clCount('opening')} · ΚΛΕΙΣΙΜΟ ${clCount('closing')}`);
     if (!st.equip) {
       if (sk === '__general' && !cls.length) { text.pop(); return; }
       rows.push(`<tr><td ${tdl}><b>${esc(name)}</b></td><td ${tdl} colspan="3" style="color:#6b6b6b">Δεν έχει δηλωθεί εξοπλισμός</td>${clCell}</tr>`);
@@ -595,16 +595,16 @@ function buildReport(month, asOf) {
 <h2 style="color:#1b2d47;margin:0 0 4px">ΚΑΘΑΡΙΟΤΗΤΕΣ / ΑΠΟΨΥΞΕΙΣ – ${label}</h2>
 <p style="margin:0 0 12px;color:#6b6b6b">${asOf ? `Δοκιμαστικό report: μέχρι ${asOf.split('-').reverse().join('/')}.` : 'Μηνιαίο report όλων των καταστημάτων.'}</p>
 <table style="border-collapse:collapse;width:100%;font-size:14px">
-<tr style="background:#eceff7"><th ${tdl}>Κατάστημα</th><th ${td}>Καθαριότητες</th><th ${td}>Αποψύξεις</th><th ${td}>Ελλείψεις</th><th ${td}>Checklists<br>άνοιγμα · κλείσιμο</th></tr>
+<tr style="background:#eceff7"><th ${tdl}>Κατάστημα</th><th ${td}>Καθαριότητες</th><th ${td}>Αποψύξεις</th><th ${td}>Ελλείψεις</th><th ${td}>Checklists<br>ΑΝΟΙΓΜΑ · ΚΛΕΙΣΙΜΟ</th></tr>
 ${rows.join('\n')}
 </table>
-<p style="font-size:13px;color:#6b6b6b">Έγιναν / απαιτούνται. «✗» = πόσες φορές δεν έγινε κάτι όπως ορίζεται. Checklists = σε πόσες ημέρες στάλθηκε στο αρχείο το checklist ανοίγματος · κλεισίματος.</p>
+<p style="font-size:13px;color:#6b6b6b">Έγιναν / απαιτούνται. «✗» = πόσες φορές δεν έγινε κάτι όπως ορίζεται. Checklists = σε πόσες ημέρες στάλθηκε στο αρχείο το checklist για ΑΝΟΙΓΜΑ · ΚΛΕΙΣΙΜΟ.</p>
 ${details.length ? `<h2 style="color:#c62828;font-size:18px;margin:20px 0 0">Τι δεν έγινε</h2>${details.join('')}`
     : totalReq ? '<p><b>Όλα έγιναν όπως ορίζεται ✅</b></p>' : '<p><b>Δεν υπάρχουν ακόμα έλεγχοι για αυτόν τον μήνα.</b></p>'}
 <p style="margin-top:24px;font-size:13px"><a href="${sheetUrl}">Google Sheet με όλες τις καταχωρήσεις</a> · <a href="${APP_URL}">Εφαρμογή</a> (ΚΑΘΑΡΙΟΤΗΤΕΣ / ΑΠΟΨΥΞΕΙΣ → 🔒 Αρχείο)</p>
 </div>`;
   return {
-    subject: `${asOf ? '[Δοκιμή] ' : ''}Καθαριότητες/Αποψύξεις – ${label} – ${totalFails ? totalFails + ' ελλείψεις' : totalReq ? 'όλα εντάξει' : 'χωρίς στοιχεία'}`,
+    subject: `${asOf ? '[Δοκιμή] ' : ''}ΚΑΘΑΡΙΟΤΗΤΕΣ / ΑΠΟΨΥΞΕΙΣ – ${label} – ${totalFails ? totalFails + ' ελλείψεις' : totalReq ? 'όλα εντάξει' : 'χωρίς στοιχεία'}`,
     html,
     text: [`ΚΑΘΑΡΙΟΤΗΤΕΣ / ΑΠΟΨΥΞΕΙΣ – ${label}`, ''].concat(text, ['', sheetUrl]).join('\n'),
   };

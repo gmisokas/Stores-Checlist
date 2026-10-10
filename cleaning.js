@@ -176,7 +176,7 @@ function checklistTable(src, ym) {
     rows.push(h('tr', {}, h('td', {}, `${DAYS_SHORT[mi.dow(d)]} ${fmtDate(mi.iso(d)).slice(0, 5)}`), cell(d, 'opening'), cell(d, 'closing')));
   }
   return h('table', { class: 'sum-table' },
-    h('thead', {}, h('tr', {}, h('th', {}, 'Ημέρα'), h('th', {}, 'Άνοιγμα'), h('th', {}, 'Κλείσιμο'))),
+    h('thead', {}, h('tr', {}, h('th', {}, 'Ημέρα'), h('th', {}, SECTIONS.opening), h('th', {}, SECTIONS.closing))),
     h('tbody', {}, rows));
 }
 
@@ -555,7 +555,7 @@ function failText(x, ym) {
 }
 
 function noticeText(storeName, ym, fails) {
-  const lines = [`🔔 Καθαριότητες/αποψύξεις – ${storeName}`, `📅 ${monthLabel(ym)}: δεν έγιναν όπως ορίζεται`];
+  const lines = [`🔔 ΚΑΘΑΡΙΟΤΗΤΕΣ / ΑΠΟΨΥΞΕΙΣ – ${storeName}`, `📅 ${monthLabel(ym)}: δεν έγιναν όπως ορίζεται`];
   for (const [type, label] of Object.entries(LOG_TYPES)) {
     const list = fails.filter((x) => x.type === type);
     if (list.length) lines.push('', `${label}:`, ...list.map((x) => '• ' + failText(x, ym)));
@@ -972,7 +972,7 @@ function updateSaveStatus() {
 function draftLeaveOk(sk) {
   const n = sk ? getDraft(sk).length : 0;
   if (!n) return true;
-  return confirm(`Έχεις ${n} τικ καθαριοτήτων/αποψύξεων που ΔΕΝ αποθηκεύτηκαν στο αρχείο.\n\nΠάτα «Άκυρο» για να γυρίσεις και να πατήσεις «Αποθήκευση στο αρχείο».\nΑν συνεχίσεις, τα τικ μένουν στη λίστα για αργότερα.`);
+  return confirm(`Έχεις ${n} τικ καθαριοτήτων/αποψύξεων που δεν αποθηκεύτηκαν στο αρχείο.\n\nΠάτα «Άκυρο» για να γυρίσεις και να πατήσεις «Αποθήκευση στο αρχείο».\nΑν συνεχίσεις, τα τικ μένουν στη λίστα για αργότερα.`);
 }
 
 /* ---- Πρόγραμμα μήνα: ο/η υπεύθυνος ορίζει ημέρες ανά εξοπλισμό ---- */
@@ -1528,7 +1528,7 @@ function archiveView(sk, src, head) {
       current ? h('p', { class: 'hint' }, 'Τρέχων μήνας: μετράνε μόνο οι εβδομάδες που έχουν ξεκινήσει.') : null),
     Object.entries(LOG_TYPES).map(([type, label]) => h('div', { class: 'box' }, h('h2', {}, label), table(type))),
     head ? h('div', { class: 'box' },
-      h('h2', {}, 'Checklists ανοίγματος / κλεισίματος'),
+      h('h2', {}, `Checklists ${SECTIONS.opening} / ${SECTIONS.closing}`),
       h('p', { class: 'hint' }, 'Όσα στάλθηκαν στο αρχείο. «—» = δεν στάλθηκε. Πάτα μια ημέρα για λεπτομέρειες.'),
       checklistTable(src, ym)) : null,
     h('div', { class: 'box' },
@@ -1809,7 +1809,7 @@ function adminCleaning() {
       repOut.textContent = [
         payload.send ? '✓ Το δοκιμαστικό στάλθηκε. Δες τα εισερχόμενα (και τα ανεπιθύμητα).' : '✓ Αποθηκεύτηκε.',
         'Παραλήπτες: ' + String(r.to || '').split(',').join(', '),
-        r.monthly ? 'Μηνιαία αποστολή: ενεργή ✓ (κάθε 1η του μήνα, 8:00)' : 'Μηνιαία αποστολή: ΔΕΝ είναι ενεργή. Στο Apps Script τρέξε μία φορά τη συνάρτηση «setupMonthlyReport».',
+        r.monthly ? 'Μηνιαία αποστολή: ενεργή ✓ (κάθε 1η του μήνα, 8:00)' : 'Μηνιαία αποστολή: δεν είναι ενεργή. Στο Apps Script τρέξε μία φορά τη συνάρτηση «setupMonthlyReport».',
       ].join('\n');
     } catch (e) {
       const m = String((e && e.message) || e);

@@ -7,10 +7,10 @@
    ========================================================== */
 
 // Έκδοση της εφαρμογής. Σε κάθε αλλαγή: ίδιος αριθμός εδώ, στο version.json και στα ?v= του index.html.
-const APP_VERSION = '18';
-const SECTIONS = { opening: 'Άνοιγμα', closing: 'Κλείσιμο' };
+const APP_VERSION = '19';
+// Οι τρεις ενότητες γράφονται πάντα με κεφαλαία (ΑΝΟΙΓΜΑ, ΚΛΕΙΣΙΜΟ, ΚΑΘΑΡΙΟΤΗΤΕΣ / ΑΠΟΨΥΞΕΙΣ).
+const SECTIONS = { opening: 'ΑΝΟΙΓΜΑ', closing: 'ΚΛΕΙΣΙΜΟ' };
 const GENERAL_ID = '__general';
-const SECTIONS_UPPER = { opening: 'ΑΝΟΙΓΜΑ', closing: 'ΚΛΕΙΣΙΜΟ' };
 const LS = {
   draft: 'cl-draft',
   settings: 'cl-settings',
@@ -257,7 +257,7 @@ function renderChecklist() {
   $('log-view').hidden = !isLog;
   $('items').replaceChildren(...(chosen
     ? rows.map((r, i) => rowEl(r, i + 1, prog))
-    : [h('li', { class: 'pick-hint' }, 'Επίλεξε «Άνοιγμα», «Κλείσιμο» ή «ΚΑΘΑΡΙΟΤΗΤΕΣ / ΑΠΟΨΥΞΕΙΣ».')]));
+    : [h('li', { class: 'pick-hint' }, 'Επίλεξε «ΑΝΟΙΓΜΑ», «ΚΛΕΙΣΙΜΟ» ή «ΚΑΘΑΡΙΟΤΗΤΕΣ / ΑΠΟΨΥΞΕΙΣ».')]));
   $('legend').hidden = !rows.some((r) => r.extra);
   document.querySelector('#view-checklist .progress').hidden = !chosen;
   $('checklist-actions').hidden = !chosen;
@@ -388,7 +388,7 @@ function summaryText() {
   const s = stats();
   const store = currentStore();
   const lines = [];
-  lines.push(`📋 ${SECTIONS_UPPER[state.section]} – ${storeLabel() || 'Χωρίς κατάστημα'}`);
+  lines.push(`📋 ${SECTIONS[state.section]} – ${storeLabel() || 'Χωρίς κατάστημα'}`);
   lines.push(`📅 ${fmtDate(f.date.value)} · 👤 ${f.name.value.trim() || '-'}`);
   lines.push(`✓ ${s.ok}/${s.rows.length} · ✗ ${s.no} · ⏳ ${s.left}`);
 
@@ -409,7 +409,7 @@ function summaryText() {
 }
 
 async function share() {
-  if (!SECTIONS[state.section]) { toast('Επίλεξε πρώτα Άνοιγμα ή Κλείσιμο.'); return; }
+  if (!SECTIONS[state.section]) { toast('Επίλεξε πρώτα «ΑΝΟΙΓΜΑ» ή «ΚΛΕΙΣΙΜΟ».'); return; }
   if (state.data.stores.length && !f.store.value) { toast('Επίλεξε πρώτα κατάστημα.'); f.store.focus(); return; }
   if (!f.name.value.trim()) { toast('Συμπλήρωσε το όνομα του υπευθύνου.'); f.name.focus(); return; }
   const s = stats();
@@ -480,7 +480,7 @@ function queueChecklist() {
 }
 
 async function sendToArchive() {
-  if (!SECTIONS[state.section]) { toast('Επίλεξε πρώτα Άνοιγμα ή Κλείσιμο.'); return; }
+  if (!SECTIONS[state.section]) { toast('Επίλεξε πρώτα «ΑΝΟΙΓΜΑ» ή «ΚΛΕΙΣΙΜΟ».'); return; }
   if (!f.store.value) { toast('Επίλεξε πρώτα κατάστημα.'); f.store.focus(); return; }
   if (!f.name.value.trim()) { toast('Συμπλήρωσε το όνομα του υπευθύνου.'); f.name.focus(); return; }
   if (!f.date.value) { toast('Συμπλήρωσε την ημερομηνία.'); f.date.focus(); return; }
@@ -538,7 +538,7 @@ function renderPrint() {
     })));
 
   $('print-area').replaceChildren(
-    h('h1', { class: 'p-title' }, `Checklist ${SECTIONS[state.section]} καταστήματος – Lartecono DaVinci`),
+    h('h1', { class: 'p-title' }, `Checklist καταστήματος – ${SECTIONS[state.section]} – Lartecono DaVinci`),
     h('div', { class: 'p-fields' },
       h('span', {}, 'Ημερομηνία: ', fmtDate(f.date.value)),
       h('span', {}, 'Υπεύθυνος: ', f.name.value.trim()),
@@ -661,7 +661,7 @@ function buildXlsx() {
   };
   const row = (cells) => { r++; rowsXml.push(`<row r="${r}">${cells.map((c) => cell(...c)).join('')}</row>`); };
 
-  row([['A', `Checklist ${SECTIONS[state.section]} καταστήματος – Lartecono DaVinci`, XS.title]]);
+  row([['A', `Checklist καταστήματος – ${SECTIONS[state.section]} – Lartecono DaVinci`, XS.title]]);
   row([['A', `Ημερομηνία: ${fmtDate(f.date.value)}`, XS.label]]);
   row([['A', `Υπεύθυνος: ${f.name.value.trim()}`, XS.label]]);
   row([['A', `Κατάστημα: ${storeLabel()}`, XS.label]]);
@@ -720,7 +720,7 @@ function toLatin(str) {
 }
 
 async function exportExcel() {
-  if (!SECTIONS[state.section]) { toast('Επίλεξε πρώτα Άνοιγμα ή Κλείσιμο.'); return; }
+  if (!SECTIONS[state.section]) { toast('Επίλεξε πρώτα «ΑΝΟΙΓΜΑ» ή «ΚΛΕΙΣΙΜΟ».'); return; }
   const blob = buildXlsx();
   const sec = state.section === 'opening' ? 'anoigma' : 'kleisimo';
   const store = toLatin(storeLabel() || 'xoris-katastima').replace(/[^A-Za-z0-9-]+/g, '-');
@@ -1171,7 +1171,7 @@ async function testToken(out) {
       const j = await r.json();
       lines.push(j.permissions && j.permissions.push
         ? 'Το repo βρέθηκε και το κλειδί έχει δικαίωμα εγγραφής. Όλα εντάξει ✅'
-        : 'Το repo βρέθηκε, αλλά το κλειδί ΔΕΝ έχει δικαίωμα εγγραφής. Στο Contents βάλε «Read and write».');
+        : 'Το repo βρέθηκε, αλλά το κλειδί δεν έχει δικαίωμα εγγραφής. Στο Contents βάλε «Read and write».');
     }
   } catch (e) {
     lines.push('Δεν έγινε σύνδεση με το GitHub. Έλεγξε το ίντερνετ. ' + (e && e.message ? e.message : ''));
@@ -1403,7 +1403,7 @@ async function init() {
   });
   $('btn-excel').addEventListener('click', exportExcel);
   $('btn-print').addEventListener('click', () => {
-    if (!SECTIONS[state.section]) { toast('Επίλεξε πρώτα Άνοιγμα ή Κλείσιμο.'); return; }
+    if (!SECTIONS[state.section]) { toast('Επίλεξε πρώτα «ΑΝΟΙΓΜΑ» ή «ΚΛΕΙΣΙΜΟ».'); return; }
     renderPrint();
     window.print();
   });

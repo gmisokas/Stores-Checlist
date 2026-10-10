@@ -45,7 +45,6 @@ const DEFAULT_EQUIPMENT = [
   { id: 'ntoulapia', name: 'Αποθηκευτικοί χώροι/ντουλάπια/ράφια', clean: { min: 1, per: 'week' } },
   { id: 'apothiki', name: 'Αποθήκη', clean: { min: 1, per: 'week' } },
   { id: 'toixoi', name: 'Τοίχοι', clean: { min: 1, per: 'month' } },
-  { id: 'portes', name: 'Πόρτες', clean: { min: 1, per: 'week' } },
   { id: 'pezodromio', name: 'Πεζοδρόμιο', clean: { min: 1, per: 'week' } },
   { id: 'kadoi', name: 'Κάδοι', clean: { min: 1, per: 'month' } },
 ];
@@ -388,7 +387,7 @@ function monthOptions(selected, count = 13) {
 
 function unitLabel(eq, no) { return no ? `${eq.name} Νο ${no}` : eq.name; }
 
-// Μονάδες ενός είδους (π.χ. Κατάψυξη Νο 1, Νο 2, Πόρτες) με βάση τον εξοπλισμό.
+// Μονάδες ενός είδους (π.χ. Κατάψυξη Νο 1, Νο 2, Αποθήκη) με βάση τον εξοπλισμό.
 function logUnits(counts, type) {
   const out = [];
   state.data.cleaning.equipment.forEach((eq) => {

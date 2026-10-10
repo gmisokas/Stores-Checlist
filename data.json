@@ -726,14 +726,6 @@
         }
       },
       {
-        "id": "portes",
-        "name": "Πόρτες",
-        "clean": {
-          "min": 1,
-          "per": "week"
-        }
-      },
-      {
         "id": "pezodromio",
         "name": "Πεζοδρόμιο",
         "clean": {

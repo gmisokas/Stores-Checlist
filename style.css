@@ -367,11 +367,18 @@ dialog textarea { width: 100%; }
 
 .tasks, .entries, .plan-list { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 6px; }
 .task { display: flex; align-items: center; gap: 8px; min-height: 44px; padding: 6px 12px; border: 1px solid var(--line); border-radius: 10px; background: #fff; }
-.task.done { border-color: var(--ok); background: var(--ok-soft); }
+.task.st-ok { border-color: var(--ok); background: var(--ok-soft); }
+.task.st-late, .task.st-overdue { border-color: var(--extra-line); background: #fff8e1; }
+.task.st-missed { border-color: var(--no); background: var(--no-soft); }
+.task.st-skip { border-color: #bdbdbd; background: #f3f4f8; }
 .task-text { flex: 1; }
 .task-text small, .entries small, .plan-list small, .sum-table small { color: var(--muted); }
 .done-tag { flex: none; color: var(--ok); font-weight: 700; font-size: 14px; }
 .todo-tag { flex: none; color: var(--muted); }
+.late-tag { flex: none; color: #8a5a00; font-weight: 700; font-size: 14px; text-align: right; }
+.miss-tag { flex: none; color: var(--important); font-weight: 700; font-size: 14px; }
+.skip-tag { flex: none; color: #555; font-weight: 700; font-size: 14px; }
+.log .box h3.late-h { color: #8a5a00; }
 .entries li { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 10px; background: #fff; font-size: 15px; }
 .entries li > span { flex: 1; }
 .del { flex: none; width: 36px; height: 36px; border: 1px solid var(--no); border-radius: 8px; background: #fff; color: var(--no); }
@@ -386,6 +393,7 @@ dialog textarea { width: 100%; }
 .cal-day.we { background: #f3f4f8; }
 .cal-day.all-done { background: var(--ok-soft); border-color: var(--ok); }
 .cal-day.missed { background: var(--no-soft); border-color: var(--no); }
+.cal-day.late { background: #fff8e1; border-color: var(--extra-line); }
 .cal-day.today { box-shadow: inset 0 0 0 2px var(--brand); }
 .cal-day.sel { background: var(--brand); border-color: var(--brand); color: #fff; }
 .cal-day.sel .cal-c { color: #fff; }
@@ -419,6 +427,7 @@ dialog textarea { width: 100%; }
 .sum-table th { color: var(--muted); font-weight: 600; }
 .sum-table .c { text-align: center; white-space: nowrap; }
 .sum-table tr.bad td { color: var(--important); }
+.sum-table tr.warn td { color: #8a5a00; }
 
 #log-dialog { max-height: calc(100% - 32px); }
 #log-dialog h2 { margin-bottom: 8px; }
@@ -434,6 +443,22 @@ dialog textarea { width: 100%; }
 .sum-table td.miss { color: var(--important); }
 .sum-table td.warn-c .linkbtn { color: #8a5a00; }
 .sum-table small { color: var(--muted); font-weight: 400; }
+
+/* Καθυστερήσεις και «Δεν έγινε» με αιτία */
+.log-late { margin: 0 0 12px; padding: 10px 12px; background: #fff3e0; border: 2px solid var(--extra-line); border-radius: 10px; font-size: 15px; }
+.log-late b { color: #8a5a00; }
+.log-late ul { margin: 6px 0; padding-left: 20px; }
+.log-late p { margin: 0 0 6px; }
+.skip-link { display: inline-block; margin-top: 8px; font-size: 15px; }
+.skip-box { display: grid; gap: 8px; margin-top: 12px; padding: 10px 12px; border: 1px dashed var(--muted); border-radius: 10px; background: #f6f8fc; }
+.skip-box p { margin: 0; }
+.skip-title { font-weight: 700; }
+.skip-why { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+.skip-why button { min-height: 44px; padding: 4px; font-size: 14px; line-height: 1.15; }
+.skip-box input { width: 100%; min-height: 44px; padding: 8px; border: 1px solid var(--line); border-radius: 8px; background: #fff; }
+.skip-box .stack { margin-top: 2px; }
+.entries li.skip { background: #f3f4f8; }
+.skip-txt { color: #555; }
 
 /* Ένδειξη αποθήκευσης στο αρχείο */
 .save-status { margin: 0; padding: 8px 12px; border-radius: 8px; font-size: 15px; font-weight: 600; }
@@ -462,6 +487,20 @@ dialog textarea { width: 100%; }
   .plan-day .cal-c b { display: block; }
 }
 .planner .cal-grid { margin-bottom: 10px; }
+/* Ημέρες που δεν αλλάζουν (πριν από σήμερα ή ήδη καταχωρημένες), με την κατάσταση της εργασίας. */
+.cal-day.plan-day.fixed { background: #f3f4f8; border-style: dashed; color: var(--muted); }
+.cal-day.plan-day.fixed.on { color: var(--text); border-style: solid; }
+.cal-day.plan-day.fixed.st-ok { background: var(--ok-soft); border-color: var(--ok); }
+.cal-day.plan-day.fixed.st-late, .cal-day.plan-day.fixed.st-overdue { background: #fff8e1; border-color: var(--extra-line); }
+.cal-day.plan-day.fixed.st-missed { background: var(--no-soft); border-color: var(--no); }
+.cal-day.plan-day.fixed.st-skip { background: #e8e8e8; border-color: #bdbdbd; }
+.cal-day.plan-day.fixed .cal-c.st { font-size: 13px; font-weight: 700; color: var(--text); }
+.cal-day.plan-day.fixed.st-ok .cal-c.st { color: #1f6b2a; }
+.cal-day.plan-day.fixed.st-late .cal-c.st, .cal-day.plan-day.fixed.st-overdue .cal-c.st { color: #8a5a00; }
+.cal-day.plan-day.fixed.st-missed .cal-c.st { color: var(--important); }
+.plan-status .past { background: #f0f0f0; color: var(--muted); }
+.plan-legend { margin-top: 0; }
+.planner .btn.danger { margin-top: 8px; }
 .planner .log-alert ul { margin: 6px 0 0; padding-left: 20px; font-size: 14px; }
 
 /* Animation πατήματος σε όλα τα κουμπιά */

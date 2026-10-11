@@ -7,7 +7,7 @@
    ========================================================== */
 
 // Έκδοση της εφαρμογής. Σε κάθε αλλαγή: ίδιος αριθμός εδώ, στο version.json και στα ?v= του index.html.
-const APP_VERSION = '21';
+const APP_VERSION = '22';
 // Οι ενότητες γράφονται πάντα με κεφαλαία (ΑΝΟΙΓΜΑ, ΚΛΕΙΣΙΜΟ, ΚΑΘΑΡΙΟΤΗΤΕΣ / ΑΠΟΨΥΞΕΙΣ, ΕΚΚΡΕΜΟΤΗΤΕΣ).
 const SECTIONS = { opening: 'ΑΝΟΙΓΜΑ', closing: 'ΚΛΕΙΣΙΜΟ' };
 const GENERAL_ID = '__general';
@@ -233,14 +233,16 @@ function fillStoreSelect() {
   const keep = f.store.value || (lsGet(LS.last, {}).store || '');
   f.store.replaceChildren(
     h('option', { value: '' }, '— Επίλεξε κατάστημα —'),
+    h('option', { value: DEMO_ID }, 'DEMO – εκπαίδευση'),
     h('option', { value: GENERAL_ID }, 'ΓΕΝΙΚΟ'),
     ...state.data.stores.map((s) => h('option', { value: s.id }, s.name || '(χωρίς όνομα)')));
-  f.store.value = keep === GENERAL_ID || state.data.stores.some((s) => s.id === keep) ? keep : '';
+  f.store.value = keep === GENERAL_ID || keep === DEMO_ID || state.data.stores.some((s) => s.id === keep) ? keep : '';
 }
 
 // Όνομα που εμφανίζεται για την επιλογή καταστήματος (κατάστημα, ΓΕΝΙΚΟ ή κενό).
 function storeLabel() {
   if (f.store.value === GENERAL_ID) return 'ΓΕΝΙΚΟ';
+  if (f.store.value === DEMO_ID) return 'DEMO';
   const st = currentStore();
   return st ? st.name : '';
 }
@@ -253,6 +255,7 @@ function updateHeader() {
 
 function renderChecklist() {
   updateHeader();
+  $('demo-banner').hidden = !isDemo();
   // ΚΑΘΑΡΙΟΤΗΤΕΣ / ΑΠΟΨΥΞΕΙΣ και ΕΚΚΡΕΜΟΤΗΤΕΣ φαίνονται στην ίδια περιοχή.
   const isLog = state.section === 'log' || state.section === 'todo';
   const rows = isLog ? [] : buildRows(state.section, currentStore());
@@ -502,6 +505,8 @@ async function sendToArchive() {
 
 // Κοινοποίηση κειμένου (Viber κ.λπ.)· αλλιώς αντιγραφή ή παράθυρο με το κείμενο.
 async function shareText(text) {
+  // Στο DEMO δεν στέλνεται τίποτα: φαίνεται μόνο το μήνυμα.
+  if (isDemo()) { showTextDialog('DEMO: έτσι θα έφτανε το μήνυμα στο Viber. Δεν στάλθηκε.', text); return; }
   if (navigator.share) {
     try { await navigator.share({ text }); return; } catch (e) { if (e.name === 'AbortError') return; }
   }
@@ -918,7 +923,7 @@ function adminStores() {
       class: 'btn',
       onclick: () => { store.contacts.push({ id: newId('p'), name: '', phone: '' }); markDirty(true); },
     }, '+ Προσθήκη υπευθύνου'),
-    shared() ? storePwBox(store) : null,
+    syncOn() ? storePwBox(store) : null,
     h('h2', {}, 'Ιδιαιτερότητες καταστήματος'),
     h('p', { class: 'hint' }, 'Έξτρα γραμμές μόνο για αυτό το κατάστημα. Εμφανίζονται χρωματισμένες, στη θέση που θα διαλέξεις.'),
     h('div', { class: 'ed-list' }, store.extras.map((x) => extraEditor(store, x))),
@@ -1344,7 +1349,9 @@ function route() {
 }
 
 function rememberLast() {
-  lsSet(LS.last, { store: f.store.value, name: f.name.value });
+  // Το DEMO δεν μένει ως τελευταία επιλογή.
+  const store = f.store.value === DEMO_ID ? (lsGet(LS.last, {}).store || '') : f.store.value;
+  lsSet(LS.last, { store, name: f.name.value });
 }
 
 // Αν το κινητό κράτησε παλιά έκδοση της σελίδας, φορτώνει τη νέα (μία φορά ανά έκδοση).
@@ -1388,8 +1395,11 @@ async function init() {
     rememberLast();
     state.logMode = 'main';
     state.logArchiveMonth = null;
+    if (f.store.value === DEMO_ID) { resetDemo(); state.section = ''; }
     renderChecklist();
     syncStore(f.store.value);
+    if (f.store.value === DEMO_ID) tourMenu();
+    else tourStop();
   });
   f.name.addEventListener('input', () => { rememberLast(); updateWho(); });
   document.querySelectorAll('#section-seg button').forEach((b) => b.addEventListener('click', () => {
@@ -1428,6 +1438,7 @@ async function init() {
   route();
   initA2hs();
   initLogSync();
+  initTour();
 }
 
 init();

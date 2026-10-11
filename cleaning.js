@@ -132,10 +132,53 @@ const sync = { busy: {}, again: {}, error: {}, at: {}, tried: {}, oldScript: fal
 // Από αυτή την έκδοση του Google Script αποθηκεύεται το «Δεν έγινε» με αιτία.
 const SKIP_VERSION = 4;
 
-function shared() { return SYNC_URL_RE.test(state.data.cleaning.syncUrl || ''); }
+// Κοινό αρχείο ρυθμισμένο (Διαχείριση → Καθαριότητες).
+function syncOn() { return SYNC_URL_RE.test(state.data.cleaning.syncUrl || ''); }
+// Για το κατάστημα που φαίνεται: στο DEMO δεν αποθηκεύεται τίποτα στο κοινό αρχείο.
+function shared() { return syncOn() && !isDemo(); }
+
+/* ---------- DEMO (εκπαίδευση): δεδομένα μόνο στη συσκευή, τίποτα στο κοινό αρχείο ή στο Viber ---------- */
+
+const DEMO_ID = '__demo';
+function isDemo() { return typeof f !== 'undefined' && !!f.store && f.store.value === DEMO_ID; }
+
+// Νέα δεδομένα δοκιμής σε κάθε έναρξη: όσα έπρεπε να γίνουν πριν από σήμερα έγιναν, εκτός από μία
+// γενική καθαριότητα (σε καθυστέρηση) και μία απόψυξη που έγινε μία ημέρα αργότερα.
+function resetDemo() {
+  const today = todayISO();
+  const ym = ymOf(today);
+  const mi = monthInfo(ym);
+  const counts = { katapsyxi: 2, vitrina: 1 };
+  setEquip(DEMO_ID, { counts, since: ym + '-01', by: 'DEMO', at: new Date().toISOString() });
+  const entries = [];
+  PlanCalc.TYPES.forEach((type) => {
+    Object.entries(PlanCalc.days(eqList(), ym, type, counts, {})).forEach(([key, list]) => {
+      const [eq, no] = key.split('#');
+      const past = list.filter((d) => mi.iso(d) < today);
+      past.forEach((d, i) => {
+        const last = i === past.length - 1;
+        if (type === 'clean' && key === 'katapsyxi#1' && last) return;
+        const day = type === 'defrost' && key === 'katapsyxi#2' && last && mi.iso(d + 1) < today ? d + 1 : d;
+        entries.push({ id: newId('e'), t: type, eq, no: Number(no), d: mi.iso(day), by: 'Μαρία (DEMO)', at: new Date(`${mi.iso(day)}T10:00:00`).toISOString() });
+      });
+    });
+  });
+  setLog(DEMO_ID, entries);
+  setDraft(DEMO_ID, []);
+  setPlans(DEMO_ID, {});
+  lsSet(LOG_LS.seen + DEMO_ID + ':' + addMonths(ym, -1), true);
+  lsDel(LOG_LS.saved + DEMO_ID);
+  try {
+    for (let i = localStorage.length - 1; i >= 0; i--) {
+      const k = localStorage.key(i);
+      if (k && k.startsWith(LS.progPrefix + DEMO_ID + ':')) localStorage.removeItem(k);
+    }
+  } catch (e) { /* τίποτα */ }
+}
 
 function storeNameOf(sk) {
   if (sk === GENERAL_ID) return 'ΓΕΝΙΚΟ';
+  if (sk === DEMO_ID) return 'DEMO';
   const st = state.data.stores.find((s) => s.id === sk);
   if (st) return st.name;
   const a = state.archive && state.archive.stores[sk];
@@ -287,7 +330,7 @@ function planFill(sk) {
 }
 
 function syncStore(sk) {
-  if (!shared() || !sk) return Promise.resolve();
+  if (!syncOn() || !sk || sk === DEMO_ID) return Promise.resolve();
   if (sync.busy[sk]) { sync.again[sk] = true; return sync.busy[sk]; }
   sync.tried[sk] = Date.now();
   const before = JSON.stringify(deviceSrc(sk));
@@ -395,7 +438,7 @@ function updateSyncStatus() {
 
 function initLogSync() {
   const flush = (force) => {
-    if (!shared()) return;
+    if (!syncOn()) return;
     const stores = new Set(queueGet().map((o) => o.store));
     const sk = f.store.value;
     if (sk && (force || Date.now() - (sync.tried[sk] || 0) > 30000)) stores.add(sk);
@@ -971,7 +1014,7 @@ function logMain(sk, setup) {
       h('button', { type: 'button', class: 'btn primary', onclick: () => logViber(sk) }, 'Αποστολή στο Viber'),
       h('button', { type: 'button', class: 'btn', onclick: () => openLogExport(sk, ym, deviceSrc(sk), shared() ? 2 : 13) }, 'Αποθήκευση σε Excel'),
       h('button', { type: 'button', class: 'btn', onclick: () => { state.logMode = 'setup'; renderLog(); scrollToLog(); } }, 'Εξοπλισμός καταστήματος'),
-      shared() ? h('button', { type: 'button', class: 'btn', onclick: () => openPlanner(sk) }, '📅 Πρόγραμμα μήνα (υπεύθυνος)') : null,
+      shared() || isDemo() ? h('button', { type: 'button', class: 'btn', onclick: () => openPlanner(sk) }, '📅 Πρόγραμμα μήνα (υπεύθυνος)') : null,
       h('button', { type: 'button', class: 'btn ghost', onclick: () => openArchive() }, '🔒 Αρχείο (με κωδικό)')));
 }
 
@@ -1211,8 +1254,9 @@ function draftLeaveOk(sk) {
 /* ---- Πρόγραμμα μήνα: ο/η υπεύθυνος ορίζει ημέρες ανά εξοπλισμό ---- */
 
 function openPlanner(sk) {
-  if (!shared()) { toast('Το πρόγραμμα μήνα χρειάζεται σύνδεση με το κοινό αρχείο (Διαχείριση → Καθαριότητες).', 6000); return; }
-  state.logMode = state.planPw && state.planPwStore === sk ? 'plan' : 'planUnlock';
+  if (!shared() && !isDemo()) { toast('Το πρόγραμμα μήνα χρειάζεται σύνδεση με το κοινό αρχείο (Διαχείριση → Καθαριότητες).', 6000); return; }
+  // Στο DEMO χωρίς κωδικό.
+  state.logMode = isDemo() || (state.planPw && state.planPwStore === sk) ? 'plan' : 'planUnlock';
   if (state.logMode === 'plan') state.planEdit = initPlanEdit(sk, plannerMonth());
   renderLog();
   scrollToLog();
@@ -1475,6 +1519,14 @@ function planEditor(sk, setup) {
       toast('Το πρόγραμμα δεν καλύπτει τις οδηγίες. Δες τι λείπει.', 5000);
       return;
     }
+    if (isDemo()) {
+      setPlans(sk, Object.assign(getPlans(sk), { [ed.ym]: JSON.parse(JSON.stringify(ed.plan)) }));
+      ed.dirty = false;
+      ed.own = true;
+      toast('DEMO: το πρόγραμμα αποθηκεύτηκε μόνο για δοκιμή σε αυτό το κινητό.', 5000);
+      rerender();
+      return;
+    }
     btn.disabled = true;
     btn.textContent = 'Αποθήκευση…';
     try {
@@ -1675,6 +1727,7 @@ function setupForm(sk, setup) {
 /* ---- Αρχείο με κωδικό ---- */
 
 function openArchive() {
+  if (isDemo()) { toast('Στο DEMO το Αρχείο δεν ανοίγει. Διάλεξε το κατάστημά σου.', 5000); return; }
   if (shared()) {
     state.logMode = state.archivePw && state.archive ? 'archive' : 'unlock';
     renderLog();
@@ -2046,7 +2099,7 @@ function logEntriesXml(src, sk, ym) {
 function adminCleaning() {
   const cfg = state.data.cleaning;
   const eqs = cfg.equipment;
-  const isShared = shared();
+  const isShared = syncOn();
   const p0 = h('input', { type: 'password', autocomplete: 'current-password', placeholder: 'Τρέχων κωδικός' });
   const p1 = h('input', { type: 'password', autocomplete: 'new-password', placeholder: 'Νέος κωδικός' });
   const p2 = h('input', { type: 'password', autocomplete: 'new-password', placeholder: 'Ξανά ο νέος κωδικός' });

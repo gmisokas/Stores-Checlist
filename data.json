@@ -730,6 +730,7 @@
     }
   ],
   "cleaning": {
+    "resetAt": "2026-10-11",
     "passwordHash": "",
     "syncUrl": "https://script.google.com/macros/s/AKfycbznKzNejg7BDs2CRNKLtLtguiSkCMU_V7G36JsSoCF-yAjvr8sAvl4IrD79WrnGcbJp/exec",
     "equipment": [

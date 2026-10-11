@@ -7,7 +7,7 @@
    ========================================================== */
 
 // Έκδοση της εφαρμογής. Σε κάθε αλλαγή: ίδιος αριθμός εδώ, στο version.json και στα ?v= του index.html.
-const APP_VERSION = '23';
+const APP_VERSION = '24';
 // Οι ενότητες γράφονται πάντα με κεφαλαία (ΑΝΟΙΓΜΑ, ΚΛΕΙΣΙΜΟ, ΚΑΘΑΡΙΟΤΗΤΕΣ / ΑΠΟΨΥΞΕΙΣ, ΕΚΚΡΕΜΟΤΗΤΕΣ).
 const SECTIONS = { opening: 'ΑΝΟΙΓΜΑ', closing: 'ΚΛΕΙΣΙΜΟ' };
 const GENERAL_ID = '__general';
@@ -182,7 +182,7 @@ function buildRows(section, store) {
   const rows = [];
   const pushExtras = (after) => extras
     .filter((x) => x.after === after)
-    .forEach((x) => rows.push({ key: x.id, text: x.text, extra: true }));
+    .forEach((x) => rows.push({ key: x.id, text: x.text, extra: true, important: !!x.important }));
 
   pushExtras('start');
   general.forEach((g) => {
@@ -202,7 +202,7 @@ function buildRows(section, store) {
   // Αν σβήστηκε η γραμμή αναφοράς, η ιδιαιτερότητα πάει στο τέλος.
   extras
     .filter((x) => x.after !== 'start' && !ids.has(x.after))
-    .forEach((x) => rows.push({ key: x.id, text: x.text, extra: true }));
+    .forEach((x) => rows.push({ key: x.id, text: x.text, extra: true, important: !!x.important }));
   return rows;
 }
 
@@ -1091,6 +1091,13 @@ function extraEditor(store, x) {
         oninput: (e) => { x.text = e.target.value; markDirty(false); },
       })),
     h('div', { class: 'ed-tools' },
+      h('label', { class: 'chk' },
+        h('input', {
+          type: 'checkbox',
+          checked: !!x.important,
+          onchange: (e) => { if (e.target.checked) x.important = true; else delete x.important; markDirty(true); },
+        }),
+        'Κόκκινα έντονα'),
       h('button', {
         type: 'button',
         class: 'danger',

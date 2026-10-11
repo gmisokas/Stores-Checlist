@@ -517,6 +517,20 @@ function archive(p) {
   return { ok: true, month, stores };
 }
 
+/* ---------- Νέα αρχή ---------- */
+
+// Εκτελείται μία φορά από το Apps Script, για καθαρή αρχή: σβήνει όλες τις καταχωρήσεις, τον εξοπλισμό,
+// τα checklists και τα προγράμματα μήνα. Κρατά τις επικεφαλίδες, τους κωδικούς και τα email.
+function clearAllData() {
+  BOOK = book();
+  locked(() => {
+    [[SH_ENTRIES, ENTRY_HEAD, C.id + 1], [SH_EQUIP, EQUIP_HEAD, 5], [SH_CHECK, CHECK_HEAD, 11], [SH_PLAN, PLAN_HEAD, 5]].forEach(([name, head, hide]) => {
+      const sh = sheet(name, head, hide);
+      if (sh.getLastRow() > 1) sh.deleteRows(2, sh.getLastRow() - 1);
+    });
+  });
+}
+
 /* ---------- Report με email: μηνιαίο και εβδομαδιαίο ---------- */
 
 // Εκτελείται μία φορά από το Apps Script: εξουσιοδότηση, χρονοδιακόπτες (κάθε 1η του μήνα και κάθε Δευτέρα)

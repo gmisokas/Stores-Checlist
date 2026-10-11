@@ -7,7 +7,7 @@
    ========================================================== */
 
 // Έκδοση της εφαρμογής. Σε κάθε αλλαγή: ίδιος αριθμός εδώ, στο version.json και στα ?v= του index.html.
-const APP_VERSION = '24';
+const APP_VERSION = '25';
 // Οι ενότητες γράφονται πάντα με κεφαλαία (ΑΝΟΙΓΜΑ, ΚΛΕΙΣΙΜΟ, ΚΑΘΑΡΙΟΤΗΤΕΣ / ΑΠΟΨΥΞΕΙΣ, ΕΚΚΡΕΜΟΤΗΤΕΣ).
 const SECTIONS = { opening: 'ΑΝΟΙΓΜΑ', closing: 'ΚΛΕΙΣΙΜΟ' };
 const GENERAL_ID = '__general';
@@ -155,6 +155,7 @@ async function fetchServerData() {
 async function load() {
   let server = null;
   try { server = await fetchServerData(); } catch (e) { /* εκτός σύνδεσης */ }
+  state.resetAt = (server && server.cleaning.resetAt) || '';
   const draft = lsGet(LS.draft, null);
   if (draft) {
     state.data = normalize(draft);
@@ -905,6 +906,7 @@ function adminStores() {
   };
 
   return h('div', {},
+    syncOn() ? allStorePwBox() : null,
     top,
     h('label', { class: 'field' }, 'Όνομα καταστήματος',
       h('input', {
@@ -936,6 +938,48 @@ function adminStores() {
 }
 
 // Κωδικός υπευθύνου για το «Πρόγραμμα μήνα» καθαριοτήτων (φυλάσσεται στο Google Script).
+// Ίδιος κωδικός υπευθύνου για όλα τα καταστήματα (Πρόγραμμα μήνα), με τον κωδικό αρχείου.
+function allStorePwBox() {
+  const admin = h('input', { type: 'password', autocomplete: 'current-password', placeholder: 'Ο δικός σου κωδικός αρχείου' });
+  const pw = h('input', { type: 'text', autocomplete: 'off', placeholder: 'π.χ. 4 ή περισσότερα ψηφία' });
+  const out = h('p', { class: 'hint result' });
+  const setAll = async (btn) => {
+    if (!admin.value) { toast('Γράψε τον κωδικό αρχείου σου.'); admin.focus(); return; }
+    if (pw.value.trim().length < 4) { toast('Ο κωδικός υπευθύνου θέλει τουλάχιστον 4 χαρακτήρες.'); pw.focus(); return; }
+    const stores = state.data.stores;
+    if (!confirm(`Να οριστεί ο ίδιος κωδικός υπευθύνου σε όλα τα καταστήματα (${stores.length});`)) return;
+    btn.disabled = true;
+    const failed = [];
+    for (let i = 0; i < stores.length; i++) {
+      out.textContent = `Περίμενε… ${i + 1}/${stores.length} (${stores[i].name})`;
+      try {
+        await apiCall({ action: 'setStorePw', pw: admin.value, store: stores[i].id, newPw: pw.value.trim() });
+      } catch (e) {
+        const m = String((e && e.message) || e);
+        if (m === 'password' || m === 'locked' || m === 'unknown-action') {
+          out.textContent = m === 'password' ? 'Ο κωδικός αρχείου είναι λάθος.' : m === 'locked' ? apiMsg(e) : 'Το Google Script χρειάζεται ενημέρωση (οδηγίες στο README).';
+          btn.disabled = false;
+          return;
+        }
+        failed.push(stores[i].name);
+      }
+    }
+    btn.disabled = false;
+    out.textContent = failed.length
+      ? `Ορίστηκε, εκτός από: ${failed.join(', ')}. Δοκίμασε ξανά.`
+      : `✓ Ορίστηκε ο ίδιος κωδικός υπευθύνου σε όλα τα καταστήματα (${stores.length}).`;
+    if (!failed.length) pw.value = '';
+  };
+  return h('div', { class: 'box' },
+    h('h2', {}, 'Κωδικός υπευθύνου για όλα τα καταστήματα'),
+    h('p', { class: 'hint' }, 'Ίδιος κωδικός για το «📅 Πρόγραμμα μήνα» σε όλα τα καταστήματα. Αργότερα μπορείς να αλλάξεις όποιο θέλεις χωριστά, παρακάτω.'),
+    h('p', { class: 'warn' }, 'Μη χρησιμοποιείς κωδικό συναγερμού/POS.'),
+    h('label', { class: 'field' }, 'Κωδικός αρχείου (δικός σου)', admin),
+    h('label', { class: 'field' }, 'Κωδικός υπευθύνου για όλους', pw),
+    h('button', { type: 'button', class: 'btn', onclick: (e) => setAll(e.currentTarget) }, 'Ορισμός σε όλα τα καταστήματα'),
+    out);
+}
+
 function storePwBox(store) {
   const admin = h('input', { type: 'password', autocomplete: 'current-password', placeholder: 'Ο δικός σου κωδικός αρχείου' });
   const pw = h('input', { type: 'text', autocomplete: 'off', placeholder: 'π.χ. 4 ή περισσότερα ψηφία' });
@@ -1369,6 +1413,22 @@ function route() {
   window.scrollTo(0, 0);
 }
 
+// Νέα αρχή (data.json → cleaning.resetAt): μία φορά σε κάθε συσκευή σβήνονται τα δεδομένα δοκιμών
+// (τικ, καταχωρήσεις, εξοπλισμός, προγράμματα, ουρά αποστολής, τελευταία επιλογή). Δεν αγγίζει τις ρυθμίσεις της Διαχείρισης.
+function resetDevice() {
+  // Από τη δημοσιευμένη έκδοση, ακόμη κι αν υπάρχει πρόχειρο στη Διαχείριση.
+  const r = state.resetAt || state.data.cleaning.resetAt || '';
+  if (!r || lsGet('cl-reset', '') === r) return;
+  const prefixes = [LS.progPrefix, 'cl-equip:', 'cl-log', 'cl-plan:', 'cl-sent:', 'cl-tour-offered', LS.last, 'cl-a2hs-hide'];
+  try {
+    for (let i = localStorage.length - 1; i >= 0; i--) {
+      const k = localStorage.key(i);
+      if (k && prefixes.some((p) => k === p || k.startsWith(p))) localStorage.removeItem(k);
+    }
+  } catch (e) { /* τίποτα */ }
+  lsSet('cl-reset', r);
+}
+
 function rememberLast() {
   // Το DEMO δεν μένει ως τελευταία επιλογή.
   const store = f.store.value === DEMO_ID ? (lsGet(LS.last, {}).store || '') : f.store.value;
@@ -1398,6 +1458,7 @@ async function init() {
   f.store = $('f-store');
 
   await load();
+  resetDevice();
   cleanupOldProgress();
   cleanupOldLog();
 

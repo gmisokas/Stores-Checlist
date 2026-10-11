@@ -73,6 +73,8 @@ function cleanCleaning(c) {
   return {
     passwordHash: c.passwordHash || '',
     syncUrl: SYNC_URL_RE.test((c.syncUrl || '').trim()) ? c.syncUrl.trim() : '',
+    // Νέα αρχή: όταν αλλάζει, κάθε συσκευή σβήνει μία φορά τα δεδομένα της (resetDevice στο app.js).
+    ...(c.resetAt ? { resetAt: String(c.resetAt) } : {}),
     equipment: c.equipment
       .map((eq) => {
         const o = { id: eq.id, name: (eq.name || '').trim() };

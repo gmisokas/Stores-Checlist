@@ -7,7 +7,7 @@
    ========================================================== */
 
 // Έκδοση της εφαρμογής. Σε κάθε αλλαγή: ίδιος αριθμός εδώ, στο version.json και στα ?v= του index.html.
-const APP_VERSION = '22';
+const APP_VERSION = '23';
 // Οι ενότητες γράφονται πάντα με κεφαλαία (ΑΝΟΙΓΜΑ, ΚΛΕΙΣΙΜΟ, ΚΑΘΑΡΙΟΤΗΤΕΣ / ΑΠΟΨΥΞΕΙΣ, ΕΚΚΡΕΜΟΤΗΤΕΣ).
 const SECTIONS = { opening: 'ΑΝΟΙΓΜΑ', closing: 'ΚΛΕΙΣΙΜΟ' };
 const GENERAL_ID = '__general';
@@ -188,6 +188,8 @@ function buildRows(section, store) {
   general.forEach((g) => {
     // Προσαρμογή της γενικής γραμμής μόνο για αυτό το κατάστημα.
     const o = overrides[g.id];
+    // Γενική γραμμή που δεν ισχύει σε αυτό το κατάστημα (π.χ. δεν υπάρχει συναγερμός).
+    if (o && o.hidden) { pushExtras(g.id); return; }
     rows.push({
       key: g.id,
       text: o && o.text ? o.text : g.text,
@@ -991,7 +993,7 @@ function addOverride(store) {
 function overrideEditor(store, id) {
   const o = store.overrides[id];
   const g = findGeneral(id);
-  return h('div', { class: 'ed-row' + (o.highlight ? ' extra' : '') },
+  return h('div', { class: 'ed-row' + (o.hidden ? ' off' : o.highlight ? ' extra' : '') },
     h('label', { class: 'field' }, 'Γενική γραμμή',
       h('select', {
         value: id,
@@ -1004,10 +1006,22 @@ function overrideEditor(store, id) {
         },
       }, g ? generalOptions(id) : [h('option', { value: id }, '(η γενική γραμμή σβήστηκε)'), ...generalOptions(id)])),
     g ? h('p', { class: 'hint' }, 'Γενικό κείμενο: ', g.text) : null,
-    h('label', { class: 'field' }, 'Κείμενο για αυτό το κατάστημα',
-      h('textarea', { rows: 3, value: o.text || '', oninput: (e) => { o.text = e.target.value; markDirty(false); } })),
+    o.hidden ? h('p', { class: 'hint' }, 'Η γραμμή δεν εμφανίζεται σε αυτό το κατάστημα.')
+      : h('label', { class: 'field' }, 'Κείμενο για αυτό το κατάστημα',
+        h('textarea', { rows: 3, value: o.text || '', oninput: (e) => { o.text = e.target.value; markDirty(false); } })),
     h('div', { class: 'ed-tools' },
       h('label', { class: 'chk notify-chk' },
+        h('input', {
+          type: 'checkbox',
+          checked: !!o.hidden,
+          onchange: (e) => {
+            if (e.target.checked) o.hidden = true;
+            else { delete o.hidden; if (!o.text && g) o.text = g.text; }
+            markDirty(true);
+          },
+        }),
+        'Δεν ισχύει σε αυτό το κατάστημα'),
+      o.hidden ? null : h('label', { class: 'chk notify-chk' },
         h('input', {
           type: 'checkbox',
           checked: !!o.highlight,
@@ -1128,8 +1142,8 @@ function cleanData(data) {
     .map((st) => Object.assign(st, {
       name: (st.name || '').trim() || 'Χωρίς όνομα',
       overrides: Object.fromEntries(Object.entries(st.overrides || {})
-        .filter(([id, o]) => findGeneralIn(out, id) && o && (o.text || '').trim())
-        .map(([id, o]) => [id, o.highlight ? { text: o.text.trim(), highlight: true } : { text: o.text.trim() }])),
+        .filter(([id, o]) => findGeneralIn(out, id) && o && (o.hidden || (o.text || '').trim()))
+        .map(([id, o]) => [id, o.hidden ? { hidden: true } : o.highlight ? { text: o.text.trim(), highlight: true } : { text: o.text.trim() }])),
       contacts: cleanContacts(st.contacts),
       extras: st.extras
         .map((x) => Object.assign(x, { text: (x.text || '').trim() }))

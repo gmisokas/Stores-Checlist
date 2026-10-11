@@ -520,3 +520,27 @@ button:not(:disabled):active, a.btn:not([aria-disabled="true"]):active { transfo
   button, .btn, a.btn { transition: none; }
   button:not(:disabled):active, a.btn:active { transform: none; }
 }
+
+/* DEMO και εκπαιδευτική περιήγηση */
+.demo-banner { margin: 12px 0 0; padding: 10px 12px; background: #e8f0fe; border: 2px solid #4f6bed; border-radius: 10px; font-size: 15px; }
+.tour { position: fixed; inset: 0; z-index: 1000; pointer-events: none; }
+.tour-block { position: fixed; background: rgba(15, 23, 42, .62); pointer-events: auto; }
+.tour-ring { position: fixed; border: 3px solid #ffd54f; border-radius: 12px; box-shadow: 0 0 0 4px rgba(255, 213, 79, .35); pointer-events: none; animation: tour-pulse 1.4s ease-in-out infinite; }
+@keyframes tour-pulse { 50% { box-shadow: 0 0 0 9px rgba(255, 213, 79, .15); } }
+.tour-card { position: fixed; left: 12px; right: 12px; max-width: 480px; margin: 0 auto; padding: 14px 16px; background: #fff; border-radius: 16px; box-shadow: 0 10px 30px rgba(0, 0, 0, .3); pointer-events: auto; }
+.tour-card.bottom { bottom: 12px; }
+.tour-card.top { top: 12px; }
+.tour-card.center { top: 50%; transform: translateY(-50%); max-height: calc(100% - 24px); overflow: auto; }
+.tour-card h3 { margin: 6px 0 4px; font-size: 19px; color: var(--brand); }
+.tour-card p { margin: 0 0 10px; font-size: 15px; line-height: 1.45; }
+.tour-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.tour-ch { font-size: 13px; font-weight: 600; color: var(--muted); }
+.tour-x { width: 36px; height: 36px; border: 0; border-radius: 50%; background: var(--bg); font-size: 16px; }
+.tour-nav { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.tour-nav .btn { flex: 0 0 auto; min-width: 110px; }
+.tour-tap { font-weight: 700; color: #8a5a00; text-align: right; }
+.tour-menu .btn { width: 100%; }
+.tour-card.nudge { animation: tour-nudge .35s; }
+@keyframes tour-nudge { 25% { transform: translateX(-8px); } 75% { transform: translateX(8px); } }
+.tour-card.center.nudge { animation: none; }
+@media (prefers-reduced-motion: reduce) { .tour-ring, .tour-card.nudge { animation: none; } }

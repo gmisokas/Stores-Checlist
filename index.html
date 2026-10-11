@@ -12,7 +12,7 @@
   <link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
   <link rel="icon" type="image/png" href="assets/favicon.png">
   <title>Lartecono Stores Checklist</title>
-  <link rel="stylesheet" href="style.css?v=21">
+  <link rel="stylesheet" href="style.css?v=22">
 </head>
 <body>
   <div id="app">
@@ -33,6 +33,10 @@
 
     <!-- ===== Οθόνη checklist (υπάλληλος) ===== -->
     <main id="view-checklist">
+      <div id="demo-banner" class="demo-banner" hidden>
+        🎓 <b>DEMO</b>: δοκιμή χωρίς κίνδυνο. Τίποτα δεν αποθηκεύεται στο αρχείο ούτε στέλνεται στο Viber.
+        <button type="button" class="linkbtn" id="demo-help">Οδηγίες</button>
+      </div>
       <section class="fields">
         <label>Ημερομηνία
           <input type="date" id="f-date">
@@ -135,7 +139,8 @@
 
   <div id="toast" class="toast" hidden></div>
 
-  <script src="cleaning.js?v=21"></script>
-  <script src="app.js?v=21"></script>
+  <script src="cleaning.js?v=22"></script>
+  <script src="app.js?v=22"></script>
+  <script src="tour.js?v=22"></script>
 </body>
 </html>

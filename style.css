@@ -544,3 +544,6 @@ button:not(:disabled):active, a.btn:not([aria-disabled="true"]):active { transfo
 @keyframes tour-nudge { 25% { transform: translateX(-8px); } 75% { transform: translateX(8px); } }
 .tour-card.center.nudge { animation: none; }
 @media (prefers-reduced-motion: reduce) { .tour-ring, .tour-card.nudge { animation: none; } }
+
+/* Προσαρμογή: γενική γραμμή που δεν ισχύει στο κατάστημα */
+.ed-row.off { opacity: .7; border-style: dashed; }

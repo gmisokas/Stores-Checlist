@@ -1983,6 +1983,19 @@ function openLogExport(sk, ymDefault, src, months) {
     h('p', { class: 'hint' }, storeNameOf(sk)),
     h('label', { class: 'field' }, 'Μήνας', selMonth),
     h('p', { class: 'hint' }, 'Διάλεξε πόσα από το καθένα θα μπουν στο αρχείο. Οι τιμές έρχονται από τον εξοπλισμό του καταστήματος.'),
+    eqCountFields(all, counts),
+    h('div', { class: 'stack' },
+      h('button', { type: 'button', class: 'btn dark', onclick: () => download('xlsx') }, 'Αποθήκευση σε Excel'),
+      h('button', { type: 'button', class: 'btn dark', onclick: () => download('pdf') }, 'Αποθήκευση σε PDF'),
+      h('button', { type: 'button', class: 'btn ghost', onclick: () => dlg.close() }, 'Άκυρο')),
+  ].flat());
+  dlg.showModal();
+  dlg.scrollTop = 0;
+}
+
+// Πόσα από κάθε μηχάνημα (Νο) και ποιοι χώροι μπαίνουν σε ένα αρχείο. Αλλάζει το counts.
+function eqCountFields(all, counts) {
+  return [
     all.filter((eq) => eq.numbered).map((eq) => h('label', { class: 'eq-row' },
       h('span', {}, eq.name),
       h('select', {
@@ -1992,13 +2005,97 @@ function openLogExport(sk, ymDefault, src, months) {
     all.filter((eq) => !eq.numbered).map((eq) => h('label', { class: 'chk-row' },
       h('input', { type: 'checkbox', checked: !!counts[eq.id], onchange: (e) => { counts[eq.id] = e.target.checked ? 1 : 0; } }),
       eq.name)),
+  ].flat();
+}
+
+/* ---------- Κενά έντυπα για εκτύπωση ---------- */
+
+// Ένα αρχείο με 4 καρτέλες χωρίς καταχωρήσεις: Άνοιγμα, Κλείσιμο, Γενική καθαριότητα, Απόψυξη.
+// Κάθε καρτέλα χωράει σε μία σελίδα A4 οριζόντια.
+function openBlankForms() {
+  const sk = f.store.value;
+  if (!sk) { toast('Επίλεξε πρώτα κατάστημα.'); return; }
+  const label = storeLabel();
+  const store = currentStore();
+  const setup = getEquip(sk);
+  const all = eqList();
+  const counts = {};
+  all.forEach((eq) => { counts[eq.id] = setup ? countOf(setup.counts, eq) : 1; });
+  const now = ymOf(todayISO());
+  const selMonth = h('select', { value: now }, [now, addMonths(now, 1), addMonths(now, 2)].map((ym) => h('option', { value: ym }, monthLabel(ym))));
+  const dlg = $('log-dialog');
+
+  const save = async (kind) => {
+    dlg.close();
+    const ym = selMonth.value;
+    const sheets = [blankChecklistSheet('opening', store, label), blankChecklistSheet('closing', store, label),
+      blankLogSheet(ym, 'clean', counts, label), blankLogSheet(ym, 'defrost', counts, label)];
+    const name = toLatin(label || 'xoris-katastima').replace(/[^A-Za-z0-9-]+/g, '-');
+    await deliverFile(kind === 'pdf' ? pdfBlob(sheets) : xlsxBlob(sheets), `kena-entypa_${name}_${ym}.${kind}`);
+  };
+
+  $('log-dialog-body').replaceChildren(...[
+    h('h2', {}, 'Κενά έντυπα για εκτύπωση'),
+    h('p', { class: 'hint' }, label),
+    h('p', { class: 'hint' }, 'Ένα αρχείο με 4 καρτέλες χωρίς καταχωρήσεις: Άνοιγμα, Κλείσιμο, Γενική καθαριότητα, Απόψυξη. Κάθε καρτέλα χωράει σε μία σελίδα A4 οριζόντια.'),
+    h('label', { class: 'field' }, 'Μήνας (για καθαριότητες και αποψύξεις)', selMonth),
+    h('p', { class: 'hint' }, setup ? 'Εξοπλισμός: όπως έχει δηλωθεί στο κατάστημα. Αλλάζεις αν θέλεις.' : 'Δεν έχει δηλωθεί εξοπλισμός σε αυτό το κινητό. Διάλεξε πόσα από το καθένα.'),
+    eqCountFields(all, counts),
     h('div', { class: 'stack' },
-      h('button', { type: 'button', class: 'btn dark', onclick: () => download('xlsx') }, 'Αποθήκευση σε Excel'),
-      h('button', { type: 'button', class: 'btn dark', onclick: () => download('pdf') }, 'Αποθήκευση σε PDF'),
+      h('button', { type: 'button', class: 'btn dark', onclick: () => save('xlsx') }, 'Αποθήκευση σε Excel'),
+      h('button', { type: 'button', class: 'btn dark', onclick: () => save('pdf') }, 'Αποθήκευση σε PDF'),
       h('button', { type: 'button', class: 'btn ghost', onclick: () => dlg.close() }, 'Άκυρο')),
   ].flat());
   dlg.showModal();
   dlg.scrollTop = 0;
+}
+
+// Κενό checklist μιας ημέρας: θέση για χειρόγραφη ημερομηνία και υπεύθυνο, ✓ / ✗ / σημειώσεις.
+function blankChecklistSheet(section, store, label) {
+  const rows = buildRows(section, store);
+  const s = sheetRows();
+  s.add([[0, `Checklist ${SECTIONS[section]} – ${label} – Lartecono DaVinci`, XS.title]]);
+  s.add([[0, 'Ημερομηνία: ____________________________          Υπεύθυνος: ______________________________________________', XS.label]], 28);
+  s.skip();
+  s.add([[0, '#', XS.head], [1, 'Ενέργεια', XS.head], [2, '✓', XS.head], [3, '✗', XS.head], [4, 'Σημειώσεις', XS.head]]);
+  const headRow = s.r;
+  rows.forEach((x, i) => {
+    const textStyle = x.important ? (x.extra ? XS.impX : XS.imp) : (x.extra ? XS.xCell : XS.cell);
+    const ctr = x.extra ? XS.xCenter : XS.center;
+    s.add([[0, i + 1, ctr], [1, x.text, textStyle], [2, '', ctr], [3, '', ctr], [4, '', x.extra ? XS.xCell : XS.cell]]);
+  });
+  if (rows.some((x) => x.extra)) s.add([[0, 'Οι κίτρινες γραμμές αφορούν ιδιαιτερότητες του συγκεκριμένου καταστήματος.', 0]]);
+  const sheet = makeSheet(SECTIONS[section], s, [[1, 1, 4], [2, 2, 120], [3, 4, 5], [5, 5, 40]], '', 'landscape', [headRow, headRow], true);
+  sheet.grow = 1; // στο PDF η «Ενέργεια» φαρδαίνει όσο χρειάζεται για να γεμίσει τη σελίδα
+  return sheet;
+}
+
+// Κενό μηνιαίο έντυπο: εξοπλισμός × ημέρες του μήνα, για ✓ με το χέρι.
+function blankLogSheet(ym, type, counts, label) {
+  const mi = monthInfo(ym);
+  const units = logUnits(counts, type);
+  const D = 3;
+  const we = (d) => mi.dow(d) === 0 || mi.dow(d) === 6;
+  const s = sheetRows();
+  s.add([[0, `${LOG_TYPES[type]} – ${label} – ${monthLabel(ym)}`, XS.title]]);
+  s.add([[0, 'Βάλε ✓ στο κουτάκι της ημέρας που έγινε η εργασία.', XS.label]]);
+  s.skip();
+  const head = [[0, 'Εξοπλισμός / χώρος', XS.head], [1, 'Νο', XS.head], [2, 'Συχνότητα', XS.head]];
+  const head2 = [[0, '', XS.head], [1, '', XS.head], [2, '', XS.head]];
+  for (let d = 1; d <= mi.dim; d++) {
+    head.push([D + d - 1, d, we(d) ? XS.headWe : XS.head]);
+    head2.push([D + d - 1, DAYS_SHORT[mi.dow(d)].slice(0, 2), we(d) ? XS.headWe : XS.head]);
+  }
+  s.add(head);
+  s.add(head2);
+  const headRow = s.r;
+  units.forEach((u) => {
+    const cells = [[0, u.eq.name, XS.cell], [1, u.no || '', XS.center], [2, freqText(u.rule), XS.cell]];
+    for (let d = 1; d <= mi.dim; d++) cells.push([D + d - 1, '', we(d) ? XS.dWe : XS.dCell]);
+    s.add(cells, 26);
+  });
+  if (!units.length) s.add([[0, 'Δεν επιλέχθηκε εξοπλισμός.', 0]]);
+  return makeSheet(LOG_TYPES[type], s, [[1, 1, 30], [2, 2, 5], [3, 3, 21], [D + 1, D + mi.dim, 4.4]], '', 'landscape', [headRow - 1, headRow], true);
 }
 
 function colName(n) {
@@ -2025,16 +2122,19 @@ function sheetRows() {
     // cells: [[στήλη (0 = A), τιμή, στυλ], …]
     add(cells, ht) {
       r++;
-      data.push(cells);
+      const row = cells.slice();
+      if (ht) row.ht = ht;
+      data.push(row);
       rows.push(`<row r="${r}"${ht ? ` ht="${ht}" customHeight="1"` : ''}>${cells.map((c) => cell(...c)).join('')}</row>`);
     },
   };
 }
 
 // Ένα φύλλο για Excel και PDF. cols: [[πρώτη στήλη, τελευταία, πλάτος], …] (1 = A). head: γραμμές κεφαλίδας [από, έως].
-function makeSheet(name, s, cols, pane, orientation, head) {
+// fit: όλο το φύλλο σε μία σελίδα A4.
+function makeSheet(name, s, cols, pane, orientation, head, fit) {
   const colsXml = cols.map(([a, b, w]) => `<col min="${a}" max="${b}" width="${w}" customWidth="1"/>`).join('');
-  return { name, xml: sheetXml(s.rows, colsXml, pane, orientation), rows: s.data, cols, orientation, head };
+  return { name, xml: sheetXml(s.rows, colsXml, pane, orientation, fit), rows: s.data, cols, orientation, head, fit: !!fit };
 }
 
 function logSheet(src, sk, ym, type, counts) {

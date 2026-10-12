@@ -1014,7 +1014,7 @@ function logMain(sk, setup) {
     saveCard,
     h('section', { class: 'actions' },
       h('button', { type: 'button', class: 'btn primary', onclick: () => logViber(sk) }, 'Αποστολή στο Viber'),
-      h('button', { type: 'button', class: 'btn', onclick: () => openLogExport(sk, ym, deviceSrc(sk), shared() ? 2 : 13) }, 'Αποθήκευση σε Excel'),
+      h('button', { type: 'button', class: 'btn', onclick: () => openLogExport(sk, ym, deviceSrc(sk), shared() ? 2 : 13) }, 'Αποθήκευση σε Excel / PDF'),
       h('button', { type: 'button', class: 'btn', onclick: () => { state.logMode = 'setup'; renderLog(); scrollToLog(); } }, 'Εξοπλισμός καταστήματος'),
       shared() || isDemo() ? h('button', { type: 'button', class: 'btn', onclick: () => openPlanner(sk) }, '📅 Πρόγραμμα μήνα (υπεύθυνος)') : null,
       h('button', { type: 'button', class: 'btn ghost', onclick: () => openArchive() }, '🔒 Αρχείο (με κωδικό)')));
@@ -1272,22 +1272,23 @@ function plannerMonth() {
 }
 
 function planUnlockForm(sk) {
-  const pw = h('input', { type: 'password', autocomplete: 'current-password', placeholder: 'Κωδικός υπευθύνου' });
+  // Κείμενο με τελείες αντί για πεδίο κωδικού: ο browser δεν το συμπληρώνει μόνος του με τον κωδικό αρχείου.
+  const pw = h('input', { type: 'text', class: 'pw-mask', autocomplete: 'off', autocapitalize: 'off', autocorrect: 'off', spellcheck: 'false', name: 'plan-code', placeholder: 'Κωδικός υπευθύνου' });
   const btn = h('button', { type: 'submit', class: 'btn dark' }, 'Είσοδος');
   const go = async (e) => {
     e.preventDefault();
     btn.disabled = true;
     try {
-      await apiCall({ action: 'checkPlanPw', store: sk, pw: pw.value });
+      await apiCall({ action: 'checkPlanPw', store: sk, pw: pw.value.trim() });
     } catch (x) {
       const m = String((x && x.message) || x);
-      toast(m === 'unknown-action' ? 'Το Google Script χρειάζεται ενημέρωση (οδηγίες στο README).' : m === 'no-password' ? 'Δεν έχει οριστεί κωδικός υπευθύνου. Ορίζεται στη Διαχείριση → Καταστήματα.' : apiMsg(x), 6000);
+      toast(m === 'unknown-action' ? 'Το Google Script χρειάζεται ενημέρωση (οδηγίες στο README).' : m === 'no-password' ? 'Δεν έχει οριστεί κωδικός υπευθύνου. Ορίζεται στη Διαχείριση → Καταστήματα.' : m === 'password' ? 'Λάθος κωδικός υπευθύνου.' : apiMsg(x), 6000);
       btn.disabled = false;
       pw.value = '';
       pw.focus();
       return;
     }
-    state.planPw = pw.value;
+    state.planPw = pw.value.trim();
     state.planPwStore = sk;
     state.planEdit = initPlanEdit(sk, plannerMonth());
     state.logMode = 'plan';
@@ -1364,7 +1365,7 @@ function planProblems(ed, setup) {
     logUnits(setup.counts, type).forEach((u) => {
       const start = PlanCalc.startDay(setup, u, ed.ym);
       planWindows(u, ed.plan[type][u.key] || [], ed.ym, start).filter((w) => !w.past && !w.ok).forEach((w) => {
-        out.push(`${LOG_TYPES[type]} · ${u.label} – ${u.rule.per === 'month' ? 'μήνας' : `εβδομάδα ${w.a}–${w.b}`}: ${w.n} από ${w.req}`);
+        out.push({ type, key: u.key, text: `${LOG_TYPES[type]} · ${u.label} – ${u.rule.per === 'month' ? 'μήνας' : `εβδομάδα ${w.a}–${w.b}`}: ${w.n} από ${w.req}` });
       });
     });
   });
@@ -1475,6 +1476,30 @@ function planEditor(sk, setup) {
     changed();
   };
 
+  // Αυτόματη κατανομή για όλο τον εξοπλισμό και τα δύο είδη, από σήμερα και μετά.
+  const autoAll = () => {
+    const when = from > 1 ? 'από σήμερα και μετά' : `για όλο τον ${monthLabel(ed.ym)}`;
+    if (!confirm(`Να γίνει αυτόματη κατανομή για όλο τον εξοπλισμό (γενική καθαριότητα και αποψύξεις), ${when};\n\nΟι προηγούμενες ημέρες και ό,τι έχει ήδη γίνει μένουν όπως είναι.\nΔεν αποθηκεύεται τίποτα μέχρι να πατήσεις «Αποθήκευση προγράμματος».`)) return;
+    PlanCalc.TYPES.forEach((type) => {
+      const s = statesOf(type);
+      const auto = PlanCalc.auto(eqList(), ed.ym, type, setup.counts);
+      logUnits(setup.counts, type).forEach((x) => {
+        ed.plan[type][x.key] = topUpDays(x, ed.ym, lockedOf(type, s, x.key), from, PlanCalc.startDay(setup, x, ed.ym), auto[x.key] || [], loadOf(type, x.key));
+      });
+    });
+    changed();
+    toast('Έγινε αυτόματη κατανομή σε όλο τον εξοπλισμό. Πάτα «Αποθήκευση προγράμματος».', 5000);
+  };
+
+  // Από τη λίστα «λείπουν ημέρες» στον εξοπλισμό που θέλει διόρθωση.
+  const goTo = (p) => {
+    ed.type = p.type;
+    ed.key = p.key;
+    rerender();
+    const box = document.querySelector('#log-view .planner .cal-grid');
+    if (box) box.scrollIntoView({ block: 'center' });
+  };
+
   // Άδειο πρόγραμμα από σήμερα και μετά (και τα δύο είδη, όλος ο εξοπλισμός).
   const clearAll = () => {
     const when = from > 1 ? `από σήμερα (${fmtDate(todayISO())}) έως το τέλος του μήνα` : `του ${monthLabel(ed.ym)}`;
@@ -1570,14 +1595,16 @@ function planEditor(sk, setup) {
       h('div', { class: 'cal-grid' }, cells),
       from > 1 ? h('p', { class: 'hint plan-legend' }, '✓ έγινε · ⚠️ με καθυστέρηση · ⏳ σε καθυστέρηση · ✗ δεν έγινε · ⊘ με αιτία') : null,
       h('button', { type: 'button', class: 'btn auto', onclick: autoUnit }, `⚡ Αυτόματη κατανομή – ${u.label}`),
+      h('button', { type: 'button', class: 'btn auto', onclick: autoAll }, '⚡ Αυτόματη κατανομή όλων'),
       h('button', { type: 'button', class: 'btn danger', onclick: clearAll }, 'Αφαίρεση όλων των εργασιών του μήνα'),
       h('p', { class: 'hint' }, from > 1
-        ? 'Η κατανομή αφορά τον εξοπλισμό που φαίνεται· η αφαίρεση όλο τον εξοπλισμό. Και τα δύο αλλάζουν μόνο από σήμερα και μετά.'
-        : 'Η κατανομή αφορά τον εξοπλισμό που φαίνεται· η αφαίρεση όλο τον εξοπλισμό.'))
+        ? 'Η πρώτη κατανομή αφορά μόνο τον εξοπλισμό που φαίνεται. Η «κατανομή όλων» και η «αφαίρεση όλων» αφορούν όλο τον εξοπλισμό και τα δύο είδη. Όλα αλλάζουν μόνο από σήμερα και μετά.'
+        : 'Η πρώτη κατανομή αφορά μόνο τον εξοπλισμό που φαίνεται. Η «κατανομή όλων» και η «αφαίρεση όλων» αφορούν όλο τον εξοπλισμό και τα δύο είδη.'))
       : h('p', { class: 'hint' }, 'Δεν υπάρχει εξοπλισμός για αυτό το είδος.'),
     ed.problems.length ? h('div', { class: 'log-alert' },
       h('div', { class: 'log-alert-title' }, 'Δεν αποθηκεύτηκε: λείπουν ημέρες'),
-      h('ul', {}, ed.problems.map((p) => h('li', {}, p)))) : null,
+      h('p', { class: 'hint' }, 'Πάτα μια γραμμή για να πας στον εξοπλισμό. Ή πάτα «⚡ Αυτόματη κατανομή όλων».'),
+      h('ul', {}, ed.problems.map((p) => h('li', {}, h('button', { type: 'button', class: 'linkbtn', onclick: () => goTo(p) }, p.text))))) : null,
     h('section', { class: 'actions' },
       h('button', { type: 'button', class: 'btn dark', onclick: (e) => save(e.currentTarget) }, 'Αποθήκευση προγράμματος'),
       h('button', { type: 'button', class: 'btn', onclick: copyPrev }, 'Αντιγραφή από τον προηγούμενο μήνα'),
@@ -1925,7 +1952,7 @@ function archiveView(sk, src, head) {
         ? h('ul', { class: 'entries' }, entries.map((e) => entryRow(sk, e, true, true)))
         : h('p', { class: 'hint' }, 'Καμία καταχώρηση αυτόν τον μήνα.')),
     h('section', { class: 'actions' },
-      src.equip ? h('button', { type: 'button', class: 'btn', onclick: () => openLogExport(sk, ym, src, head ? 0 : 13) }, 'Αποθήκευση σε Excel') : null,
+      src.equip ? h('button', { type: 'button', class: 'btn', onclick: () => openLogExport(sk, ym, src, head ? 0 : 13) }, 'Αποθήκευση σε Excel / PDF') : null,
       issues.length ? h('button', { type: 'button', class: 'btn viber', onclick: () => shareText(noticeText(storeNameOf(sk), ym, issues, asOf)) }, 'Αποστολή όσων δεν έγιναν στο Viber') : null,
       h('button', { type: 'button', class: 'btn ghost', onclick: lockArchive }, 'Κλείδωμα και επιστροφή')));
 }
@@ -1943,23 +1970,19 @@ function openLogExport(sk, ymDefault, src, months) {
   const selMonth = h('select', { value: ymDefault, disabled: !months },
     months ? monthOptions(ymDefault, months) : h('option', { value: ymDefault }, monthLabel(ymDefault)));
 
-  const download = async () => {
+  const download = async (kind) => {
     dlg.close();
     const ym = selMonth.value;
-    const blob = xlsxBlob([
-      { name: LOG_TYPES.clean, xml: logSheetXml(src, sk, ym, 'clean', counts) },
-      { name: LOG_TYPES.defrost, xml: logSheetXml(src, sk, ym, 'defrost', counts) },
-      { name: 'Καταχωρήσεις', xml: logEntriesXml(src, sk, ym) },
-    ]);
+    const sheets = [logSheet(src, sk, ym, 'clean', counts), logSheet(src, sk, ym, 'defrost', counts), logEntriesSheet(src, sk, ym)];
     const store = toLatin(storeNameOf(sk) || 'xoris-katastima').replace(/[^A-Za-z0-9-]+/g, '-');
-    await deliverFile(blob, `kathariotites-apopsyxeis_${store}_${ym}.xlsx`);
+    await deliverFile(kind === 'pdf' ? pdfBlob(sheets) : xlsxBlob(sheets), `kathariotites-apopsyxeis_${store}_${ym}.${kind}`);
   };
 
   $('log-dialog-body').replaceChildren(...[
-    h('h2', {}, 'Αποθήκευση σε Excel'),
+    h('h2', {}, 'Αποθήκευση σε Excel ή PDF'),
     h('p', { class: 'hint' }, storeNameOf(sk)),
     h('label', { class: 'field' }, 'Μήνας', selMonth),
-    h('p', { class: 'hint' }, 'Διάλεξε πόσα από το καθένα θα μπουν στο Excel. Οι τιμές έρχονται από τον εξοπλισμό του καταστήματος.'),
+    h('p', { class: 'hint' }, 'Διάλεξε πόσα από το καθένα θα μπουν στο αρχείο. Οι τιμές έρχονται από τον εξοπλισμό του καταστήματος.'),
     all.filter((eq) => eq.numbered).map((eq) => h('label', { class: 'eq-row' },
       h('span', {}, eq.name),
       h('select', {
@@ -1970,7 +1993,8 @@ function openLogExport(sk, ymDefault, src, months) {
       h('input', { type: 'checkbox', checked: !!counts[eq.id], onchange: (e) => { counts[eq.id] = e.target.checked ? 1 : 0; } }),
       eq.name)),
     h('div', { class: 'stack' },
-      h('button', { type: 'button', class: 'btn dark', onclick: download }, 'Λήψη Excel'),
+      h('button', { type: 'button', class: 'btn dark', onclick: () => download('xlsx') }, 'Αποθήκευση σε Excel'),
+      h('button', { type: 'button', class: 'btn dark', onclick: () => download('pdf') }, 'Αποθήκευση σε PDF'),
       h('button', { type: 'button', class: 'btn ghost', onclick: () => dlg.close() }, 'Άκυρο')),
   ].flat());
   dlg.showModal();
@@ -1985,6 +2009,7 @@ function colName(n) {
 
 function sheetRows() {
   const rows = [];
+  const data = []; // ίδιες γραμμές για το PDF (null = κενή γραμμή)
   let r = 0;
   const cell = (c, v, st) => {
     const ref = colName(c) + r;
@@ -1994,17 +2019,25 @@ function sheetRows() {
   };
   return {
     rows,
+    data,
     get r() { return r; },
-    skip() { r++; },
+    skip() { r++; data.push(null); },
     // cells: [[στήλη (0 = A), τιμή, στυλ], …]
     add(cells, ht) {
       r++;
+      data.push(cells);
       rows.push(`<row r="${r}"${ht ? ` ht="${ht}" customHeight="1"` : ''}>${cells.map((c) => cell(...c)).join('')}</row>`);
     },
   };
 }
 
-function logSheetXml(src, sk, ym, type, counts) {
+// Ένα φύλλο για Excel και PDF. cols: [[πρώτη στήλη, τελευταία, πλάτος], …] (1 = A). head: γραμμές κεφαλίδας [από, έως].
+function makeSheet(name, s, cols, pane, orientation, head) {
+  const colsXml = cols.map(([a, b, w]) => `<col min="${a}" max="${b}" width="${w}" customWidth="1"/>`).join('');
+  return { name, xml: sheetXml(s.rows, colsXml, pane, orientation), rows: s.data, cols, orientation, head };
+}
+
+function logSheet(src, sk, ym, type, counts) {
   const mi = monthInfo(ym);
   const setup = Object.assign({}, src.equip || {}, { counts });
   const units = logUnits(counts, type);
@@ -2065,13 +2098,11 @@ function logSheetXml(src, sk, ym, type, counts) {
   s.add([[1, '', XS.dWe], [2, 'Σάββατο / Κυριακή', 0]]);
   s.add([[0, 'Κάθε εργασία ελέγχεται με την ημέρα του προγράμματος. Αν καθυστερήσει, μένει ανοιχτή μέχρι την επόμενη ημέρα του προγράμματος για τον ίδιο εξοπλισμό.', 0]]);
 
-  const cols = [`<col min="1" max="1" width="30" customWidth="1"/>`, `<col min="2" max="2" width="5" customWidth="1"/>`,
-    `<col min="3" max="3" width="17" customWidth="1"/>`, `<col min="${D + 1}" max="${last}" width="3.6" customWidth="1"/>`,
-    `<col min="${last + 1}" max="${last + SUMS.length}" width="13" customWidth="1"/>`];
-  return sheetXml(s.rows, cols.join(''), `xSplit="3" ySplit="${headRow}" topLeftCell="D${headRow + 1}" activePane="bottomRight"`, 'landscape');
+  const cols = [[1, 1, 30], [2, 2, 5], [3, 3, 17], [D + 1, last, 3.6], [last + 1, last + SUMS.length, 13]];
+  return makeSheet(LOG_TYPES[type], s, cols, `xSplit="3" ySplit="${headRow}" topLeftCell="D${headRow + 1}" activePane="bottomRight"`, 'landscape', [headRow - 1, headRow]);
 }
 
-function logEntriesXml(src, sk, ym) {
+function logEntriesSheet(src, sk, ym) {
   const entries = src.entries.filter((e) => ymOf(e.d) === ym)
     .sort((a, b) => (a.d + a.at).localeCompare(b.d + b.at));
   const s = sheetRows();
@@ -2089,11 +2120,8 @@ function logEntriesXml(src, sk, ym) {
       [5, e.by || '', XS.cell], [6, at ? `${fmtDate(localISO(at)).slice(0, 5)} ${at.toTimeString().slice(0, 5)}` : '', XS.center]]);
   });
   if (!entries.length) s.add([[0, 'Καμία καταχώρηση αυτόν τον μήνα.', 0]]);
-  const cols = '<col min="1" max="1" width="12" customWidth="1"/><col min="2" max="2" width="20" customWidth="1"/>'
-    + '<col min="3" max="3" width="34" customWidth="1"/><col min="4" max="4" width="5" customWidth="1"/>'
-    + '<col min="5" max="5" width="34" customWidth="1"/><col min="6" max="6" width="26" customWidth="1"/>'
-    + '<col min="7" max="7" width="14" customWidth="1"/>';
-  return sheetXml(s.rows, cols, `ySplit="${headRow}" topLeftCell="A${headRow + 1}" activePane="bottomLeft"`, 'portrait');
+  const cols = [[1, 1, 12], [2, 2, 20], [3, 3, 34], [4, 4, 5], [5, 5, 34], [6, 6, 26], [7, 7, 14]];
+  return makeSheet('Καταχωρήσεις', s, cols, `ySplit="${headRow}" topLeftCell="A${headRow + 1}" activePane="bottomLeft"`, 'portrait', [headRow, headRow]);
 }
 
 /* ---------- Διαχείριση → Καθαριότητες ---------- */

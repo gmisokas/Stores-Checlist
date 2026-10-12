@@ -7,9 +7,11 @@
    ========================================================== */
 
 // Έκδοση της εφαρμογής. Σε κάθε αλλαγή: ίδιος αριθμός εδώ, στο version.json και στα ?v= του index.html.
-const APP_VERSION = '28';
-// Οι ενότητες γράφονται πάντα με κεφαλαία (ΑΝΟΙΓΜΑ, ΚΛΕΙΣΙΜΟ, ΚΑΘΑΡΙΟΤΗΤΕΣ / ΑΠΟΨΥΞΕΙΣ, ΕΚΚΡΕΜΟΤΗΤΕΣ).
+const APP_VERSION = '29';
+// Οι ενότητες γράφονται πάντα με κεφαλαία (ΑΝΟΙΓΜΑ, ΚΛΕΙΣΙΜΟ, ΚΑΘΑΡΙΟΤΗΤΕΣ / ΑΠΟΨΥΞΕΙΣ).
 const SECTIONS = { opening: 'ΑΝΟΙΓΜΑ', closing: 'ΚΛΕΙΣΙΜΟ' };
+// Τίτλος στη μπάρα κάθε ενότητας (στον υπεύθυνο, ανάλογα με την οθόνη: managerTitle στο cleaning.js).
+const SEC_TITLE = { opening: '☀️ ΑΝΟΙΓΜΑ', closing: '🌙 ΚΛΕΙΣΙΜΟ', log: '🧽 ΚΑΘΑΡΙΟΤΗΤΕΣ / ΑΠΟΨΥΞΕΙΣ', manager: '⚙️ ΥΠΕΥΘΥΝΟΣ' };
 const GENERAL_ID = '__general';
 const LS = {
   draft: 'cl-draft',
@@ -21,7 +23,11 @@ const LS = {
 const state = {
   data: null,
   hasDraft: false,
-  section: 'opening',
+  // '' = αρχική · opening / closing / log · manager (υπεύθυνος καταστήματος)
+  section: '',
+  whoEdit: false,
+  logOther: false,
+  logSkip: null,
   adminTab: 'general',
   adminSection: 'opening',
   adminStore: null,
@@ -42,6 +48,8 @@ const state = {
   logSaving: false,
   // Πρόγραμμα μήνα του υπευθύνου
   planEdit: null,
+  // Μετά τον κωδικό υπευθύνου: κατευθείαν σε αυτή την οθόνη (π.χ. 'setup').
+  mgrNext: null,
   planPw: '',
   planPwStore: '',
   archSaving: false,
@@ -232,14 +240,33 @@ function cleanupOldProgress() {
    Οθόνη checklist
    ========================================================== */
 
+// Το DEMO δεν είναι στη λίστα: μπαίνει μόνο όσο είναι επιλεγμένο (από το «🎓 Εκπαίδευση»).
 function fillStoreSelect() {
   const keep = f.store.value || (lsGet(LS.last, {}).store || '');
-  f.store.replaceChildren(
+  f.store.replaceChildren(...[
     h('option', { value: '' }, '— Επίλεξε κατάστημα —'),
-    h('option', { value: DEMO_ID }, 'DEMO – εκπαίδευση'),
+    keep === DEMO_ID ? demoOption() : null,
     h('option', { value: GENERAL_ID }, 'ΓΕΝΙΚΟ'),
-    ...state.data.stores.map((s) => h('option', { value: s.id }, s.name || '(χωρίς όνομα)')));
+    ...state.data.stores.map((s) => h('option', { value: s.id }, s.name || '(χωρίς όνομα)')),
+  ].filter(Boolean));
   f.store.value = keep === GENERAL_ID || keep === DEMO_ID || state.data.stores.some((s) => s.id === keep) ? keep : '';
+}
+
+function demoOption() { return h('option', { value: DEMO_ID }, 'DEMO – εκπαίδευση'); }
+
+function enterDemo() {
+  if (isDemo()) return;
+  if (![...f.store.options].some((o) => o.value === DEMO_ID)) f.store.add(demoOption(), 1);
+  f.store.value = DEMO_ID;
+  f.store.dispatchEvent(new Event('change'));
+}
+
+// Έξοδος από το DEMO: πίσω στο κατάστημα του κινητού (ή στην επιλογή καταστήματος).
+function leaveDemo() {
+  if (typeof tourStop === 'function') tourStop();
+  f.store.value = lsGet(LS.last, {}).store || '';
+  f.store.dispatchEvent(new Event('change'));
+  window.scrollTo(0, 0);
 }
 
 // Όνομα που εμφανίζεται για την επιλογή καταστήματος (κατάστημα, ΓΕΝΙΚΟ ή κενό).
@@ -250,33 +277,176 @@ function storeLabel() {
   return st ? st.name : '';
 }
 
-function updateHeader() {
-  const d = fmtDate(f.date.value);
-  $('top-date').textContent = d ? 'Ημερομηνία: ' + d : '';
-  $('hero-sub').textContent = [storeLabel(), d ? 'Ημερομηνία: ' + d : ''].filter(Boolean).join(' · ');
+// Έτοιμο για χρήση: κατάστημα και όνομα (στο DEMO αρκεί το κατάστημα).
+function ready() { return !!f.store.value && (isDemo() || !!f.name.value.trim()); }
+
+// «Τετ 14/10», «Χθες, Τρι 13/10» ή «Δευ 5/10/2026».
+function dayText(iso) {
+  const [y, m, d] = iso.split('-').map(Number);
+  const label = `${DAYS_SHORT[new Date(y, m - 1, d).getDay()]} ${d}/${m}`;
+  const today = todayISO();
+  if (iso === today) return label;
+  if (iso === addDays(today, -1)) return `Χθες, ${label}`;
+  return `${label}/${y}`;
 }
 
-function renderChecklist() {
-  updateHeader();
-  $('demo-banner').hidden = !isDemo();
-  // ΚΑΘΑΡΙΟΤΗΤΕΣ / ΑΠΟΨΥΞΕΙΣ και ΕΚΚΡΕΜΟΤΗΤΕΣ φαίνονται στην ίδια περιοχή.
-  const isLog = state.section === 'log' || state.section === 'todo';
-  const rows = isLog ? [] : buildRows(state.section, currentStore());
-  const prog = isLog ? {} : getProg();
-  const chosen = !!SECTIONS[state.section];
-  $('items').hidden = isLog;
-  $('log-view').hidden = !isLog;
-  $('items').replaceChildren(...(chosen
-    ? rows.map((r, i) => rowEl(r, i + 1, prog))
-    : [h('li', { class: 'pick-hint' }, 'Επίλεξε «ΑΝΟΙΓΜΑ», «ΚΛΕΙΣΙΜΟ», «ΚΑΘΑΡΙΟΤΗΤΕΣ / ΑΠΟΨΥΞΕΙΣ» ή «ΕΚΚΡΕΜΟΤΗΤΕΣ».')]));
-  $('legend').hidden = !rows.some((r) => r.extra);
-  document.querySelector('#view-checklist .progress').hidden = !chosen;
-  $('checklist-actions').hidden = !chosen;
-  $('blank-forms').hidden = !f.store.value;
-  document.querySelectorAll('#section-seg button').forEach((b) => {
-    b.setAttribute('aria-pressed', String(b.dataset.section === state.section));
-  });
+// Γραμμή «ΚΑΤΑΣΤΗΜΑ · Όνομα · Ημέρα ✎». Άλλη ημέρα από σήμερα φαίνεται με χρώμα.
+function updateInfo() {
+  const d = f.date.value;
+  $('who-text').replaceChildren(
+    h('b', {}, storeLabel() || '—'), ' · ',
+    f.name.value.trim() || (isDemo() ? 'χωρίς όνομα' : '—'), ' · ',
+    h('span', { class: d && d !== todayISO() ? 'who-day other' : 'who-day' }, d ? dayText(d) : '—'));
+}
+
+// Ανοίγει τα στοιχεία για συμπλήρωση (π.χ. όταν λείπει το όνομα).
+function askWho(field) {
+  state.whoEdit = true;
+  renderChecklist();
+  $('who').scrollIntoView({ block: 'start' });
+  (field || f.name).focus();
+}
+
+function whoDone() {
+  if (!f.store.value) { toast('Διάλεξε κατάστημα.'); f.store.focus(); return; }
+  if (!isDemo() && !f.name.value.trim()) { toast('Γράψε το ονοματεπώνυμό σου.'); f.name.focus(); return; }
+  if (!f.date.value) f.date.value = todayISO();
+  state.whoEdit = false;
+  rememberLast();
+  renderChecklist();
+}
+
+/* ---------- Πλοήγηση: αρχική ↔ ενότητες ---------- */
+
+// Όσο είσαι σε ενότητα υπάρχει ένα επιπλέον βήμα στο ιστορικό, ώστε το «πίσω» του κινητού
+// να γυρίζει στην αρχική αντί να κλείνει την εφαρμογή.
+function openSection(sec) {
+  if (!ready()) return;
+  if (!state.section && sec) { try { history.pushState({ app: 'sec' }, ''); } catch (e) { /* τίποτα */ } }
+  state.section = sec;
+  state.logMode = 'main';
+  state.planEdit = null;
+  state.logSkip = null;
+  state.logOther = false;
+  state.whoEdit = false;
+  $('more').open = false;
+  renderChecklist();
+  window.scrollTo(0, 0);
+}
+
+// Ένα βήμα πίσω: από οθόνη του υπευθύνου στο μενού του, αλλιώς στην αρχική. false = ακυρώθηκε.
+function stepBack() {
+  if (state.section === 'manager' && managerSub()) {
+    if (state.logMode === 'plan' && state.planEdit && state.planEdit.dirty
+      && !confirm('Υπάρχουν αλλαγές στο πρόγραμμα που δεν αποθηκεύτηκαν. Να χαθούν;')) return false;
+    state.logMode = 'main';
+    state.planEdit = null;
+  } else {
+    state.section = '';
+    state.logMode = 'main';
+    state.planEdit = null;
+    state.logSkip = null;
+  }
+  state.whoEdit = false;
+  renderChecklist();
+  window.scrollTo(0, 0);
+  return true;
+}
+
+function uiBack() {
+  if (!stepBack()) return;
+  if (!state.section && history.state && history.state.app === 'sec') history.back();
+}
+
+// Στην αρχική χωρίς ερωτήσεις (αλλαγή καταστήματος, DEMO).
+function goHome() {
+  const was = !!state.section;
+  state.section = '';
+  state.logMode = 'main';
+  state.planEdit = null;
+  state.logSkip = null;
+  if (was && history.state && history.state.app === 'sec') history.back();
+}
+
+function onPopState() {
+  if (location.hash === '#admin' || $('view-checklist').hidden || !state.section) return;
+  const ok = stepBack();
+  if (!ok || state.section) { try { history.pushState({ app: 'sec' }, ''); } catch (e) { /* τίποτα */ } }
+}
+
+// Μπάρα ενότητας: τίτλος και «‹ Αρχική» (ή «‹ Υπεύθυνος» μέσα στις οθόνες του υπευθύνου).
+function updateSecBar() {
+  const sec = state.section;
+  if (!sec) return;
+  const title = $('sec-title');
+  title.textContent = sec === 'manager' ? managerTitle() : SEC_TITLE[sec];
+  title.className = 'sec-title s-' + sec;
+  $('back-label').textContent = sec === 'manager' && managerSub() ? 'Υπεύθυνος' : 'Αρχική';
+}
+
+/* ---------- Αρχική: πλακίδια ---------- */
+
+// Κατάσταση ΑΝΟΙΓΜΑΤΟΣ / ΚΛΕΙΣΙΜΑΤΟΣ της ημέρας για το πλακίδιο.
+function sectionStatus(sec) {
+  const sk = f.store.value;
+  const rows = buildRows(sec, currentStore());
+  const prog = lsGet(`${LS.progPrefix}${sk || 'geniko'}:${f.date.value}:${sec}`, {});
+  const done = rows.filter((r) => (prog[r.key] || {}).s).length;
+  let rec = lsGet(`cl-sent:${sk}:${f.date.value}:${sec}`, null);
+  if (typeof rec === 'string') rec = { at: rec };
+  if (rec && rec.at) return ['ok', `✓ Στάλθηκε ${new Date(rec.at).toTimeString().slice(0, 5)}`];
+  if (!done) return ['', 'Δεν ξεκίνησε'];
+  return [done === rows.length ? 'ok' : 'wip', `${done} από ${rows.length}`];
+}
+
+function updateHome() {
+  if (!ready()) return;
+  for (const sec of Object.keys(SECTIONS)) {
+    const [cls, text] = sectionStatus(sec);
+    const el = $('sub-' + sec);
+    el.textContent = text;
+    el.className = 'tile-sub' + (cls ? ' ' + cls : '');
+  }
   updateTodoBadge();
+}
+
+// Ποια οθόνη φαίνεται: αρχική (πλακίδια), ΑΝΟΙΓΜΑ / ΚΛΕΙΣΙΜΟ, ΚΑΘΑΡΙΟΤΗΤΕΣ / ΑΠΟΨΥΞΕΙΣ ή υπεύθυνος.
+function renderChecklist() {
+  // Πρώτα κατάστημα και όνομα.
+  if (!ready() && state.section) goHome();
+  const sec = state.section;
+  const home = !sec;
+  const check = !!SECTIONS[sec];
+  const isLog = sec === 'log' || sec === 'manager';
+  document.body.dataset.sec = sec || 'home';
+  $('topbar').hidden = !home;
+  $('sec-bar').hidden = home;
+  $('demo-banner').hidden = !isDemo();
+
+  $('who').hidden = sec === 'manager';
+  $('who-line').hidden = !ready();
+  $('who-line').setAttribute('aria-expanded', String(!!state.whoEdit));
+  $('who-box').hidden = ready() && !state.whoEdit;
+  $('who-title').textContent = ready() ? 'Αλλαγή στοιχείων' : 'Καλώς ήρθες! Διάλεξε κατάστημα και γράψε το ονοματεπώνυμό σου.';
+  $('date-field').hidden = !ready();
+  $('date-hint').hidden = !ready();
+  $('who-done').textContent = ready() ? 'Τέλος' : 'Συνέχεια';
+  updateInfo();
+
+  $('home').hidden = !home || !ready();
+  $('home-foot').hidden = !home;
+
+  const rows = check ? buildRows(sec, currentStore()) : [];
+  const prog = check ? getProg() : {};
+  $('items').hidden = !check;
+  $('items').replaceChildren(...rows.map((r, i) => rowEl(r, i + 1, prog)));
+  $('legend').hidden = !rows.some((r) => r.extra);
+  $('progress').hidden = !check;
+  $('checklist-actions').hidden = !check;
+  $('log-view').hidden = !isLog;
+
+  updateSecBar();
+  if (home) updateHome(); else updateTodoBadge();
   if (isLog) renderLog();
   updateProgress();
   updateArchiveBtn();
@@ -305,8 +475,10 @@ function rowEl(r, n, prog) {
     h('button', {
       type: 'button',
       class: 'note-btn' + (p.n ? ' has' : ''),
+      'aria-label': 'Σημείωση',
+      title: 'Σημείωση',
       onclick: () => { note.hidden = !note.hidden; if (!note.hidden) note.focus(); },
-    }, 'Σημείωση')),
+    }, '✎')),
   note,
   r.notify ? notifyBox() : null);
 }
@@ -390,8 +562,7 @@ function updateProgress() {
   const s = stats();
   const total = s.rows.length || 1;
   $('bar-fill').style.width = Math.round(((s.ok + s.no) / total) * 100) + '%';
-  $('progress-text').textContent =
-    `${SECTIONS[state.section]}: ${s.ok + s.no} από ${s.rows.length} · ✓ ${s.ok} · ✗ ${s.no} · απομένουν ${s.left}`;
+  $('progress-text').textContent = `${s.ok + s.no} από ${s.rows.length} · ✓ ${s.ok} · ✗ ${s.no}`;
 }
 
 /* ---------- Αποστολή στο Viber ---------- */
@@ -422,8 +593,8 @@ function summaryText() {
 
 async function share() {
   if (!SECTIONS[state.section]) { toast('Επίλεξε πρώτα «ΑΝΟΙΓΜΑ» ή «ΚΛΕΙΣΙΜΟ».'); return; }
-  if (state.data.stores.length && !f.store.value) { toast('Επίλεξε πρώτα κατάστημα.'); f.store.focus(); return; }
-  if (!f.name.value.trim()) { toast('Συμπλήρωσε το όνομα του υπευθύνου.'); f.name.focus(); return; }
+  if (state.data.stores.length && !f.store.value) { toast('Επίλεξε πρώτα κατάστημα.'); askWho(f.store); return; }
+  if (!f.name.value.trim() && !isDemo()) { toast('Συμπλήρωσε το όνομα του υπευθύνου.'); askWho(); return; }
   const s = stats();
   if (s.left && !confirm(`Υπάρχουν ${s.left} γραμμές χωρίς ✓ ή ✗. Να σταλεί έτσι;`)) return;
   // Η αποστολή στο Viber αποθηκεύει και στο αρχείο (χωρίς αναμονή: η κοινοποίηση ανοίγει αμέσως).
@@ -493,9 +664,9 @@ function queueChecklist() {
 
 async function sendToArchive() {
   if (!SECTIONS[state.section]) { toast('Επίλεξε πρώτα «ΑΝΟΙΓΜΑ» ή «ΚΛΕΙΣΙΜΟ».'); return; }
-  if (!f.store.value) { toast('Επίλεξε πρώτα κατάστημα.'); f.store.focus(); return; }
-  if (!f.name.value.trim()) { toast('Συμπλήρωσε το όνομα του υπευθύνου.'); f.name.focus(); return; }
-  if (!f.date.value) { toast('Συμπλήρωσε την ημερομηνία.'); f.date.focus(); return; }
+  if (!f.store.value) { toast('Επίλεξε πρώτα κατάστημα.'); askWho(f.store); return; }
+  if (!f.name.value.trim()) { toast('Συμπλήρωσε το όνομα του υπευθύνου.'); askWho(); return; }
+  if (!f.date.value) { toast('Συμπλήρωσε την ημερομηνία.'); askWho(f.date); return; }
   const s = stats();
   if (s.left && !confirm(`Υπάρχουν ${s.left} γραμμές χωρίς ✓ ή ✗. Να αποθηκευτεί έτσι στο αρχείο;`)) return;
   const sk = f.store.value;
@@ -1625,7 +1796,7 @@ function route() {
   const admin = location.hash === '#admin';
   $('view-checklist').hidden = admin;
   $('view-admin').hidden = !admin;
-  if (admin) renderAdmin();
+  if (admin) { $('topbar').hidden = false; renderAdmin(); }
   else { fillStoreSelect(); renderChecklist(); }
   window.scrollTo(0, 0);
 }
@@ -1685,28 +1856,34 @@ async function init() {
   state.section = '';
   $('draft-banner').hidden = !state.hasDraft;
 
-  f.date.addEventListener('change', renderChecklist);
-  let prevStore = f.store.value;
-  f.store.addEventListener('focus', () => { prevStore = f.store.value; });
+  f.date.addEventListener('change', () => { if (!f.date.value) f.date.value = todayISO(); renderChecklist(); });
   f.store.addEventListener('change', () => {
-    if (state.section === 'log' && prevStore !== f.store.value && !draftLeaveOk(prevStore)) { f.store.value = prevStore; return; }
-    prevStore = f.store.value;
     rememberLast();
     state.logMode = 'main';
     state.logArchiveMonth = null;
-    if (f.store.value === DEMO_ID) { resetDemo(); state.section = ''; }
+    state.logSkip = null;
+    if (f.store.value === DEMO_ID) { resetDemo(); goHome(); }
+    else {
+      // Το DEMO φεύγει από τη λίστα μόλις διαλεχτεί άλλο κατάστημα.
+      const o = [...f.store.options].find((x) => x.value === DEMO_ID);
+      if (o) o.remove();
+    }
     renderChecklist();
     syncStore(f.store.value);
     if (f.store.value === DEMO_ID) tourMenu();
     else tourStop();
   });
-  f.name.addEventListener('input', () => { rememberLast(); updateWho(); });
-  document.querySelectorAll('#section-seg button').forEach((b) => b.addEventListener('click', () => {
-    if (state.section === 'log' && !['log', 'todo'].includes(b.dataset.section) && !draftLeaveOk(f.store.value)) return;
-    state.section = b.dataset.section;
-    if (state.section === 'log' && state.logMode !== 'archive') state.logMode = 'main';
+  f.name.addEventListener('input', () => { rememberLast(); updateWho(); updateInfo(); });
+  $('who-line').addEventListener('click', () => {
+    state.whoEdit = !state.whoEdit;
     renderChecklist();
-  }));
+  });
+  $('who-done').addEventListener('click', whoDone);
+  document.querySelectorAll('#home [data-section]').forEach((b) => b.addEventListener('click', () => openSection(b.dataset.section)));
+  $('go-back').addEventListener('click', uiBack);
+  window.addEventListener('popstate', onPopState);
+  $('demo-exit').addEventListener('click', leaveDemo);
+  $('open-tour').addEventListener('click', () => { if (isDemo()) tourMenu(); else enterDemo(); });
   document.querySelectorAll('.tabs button').forEach((b) => b.addEventListener('click', () => {
     state.adminTab = b.dataset.tab;
     renderAdmin();
@@ -1714,14 +1891,9 @@ async function init() {
 
   $('btn-share').addEventListener('click', share);
   $('btn-archive').addEventListener('click', sendToArchive);
-  // Τικ καθαριοτήτων/αποψύξεων που δεν αποθηκεύτηκαν: ο browser ρωτά πριν κλείσει η σελίδα.
-  window.addEventListener('beforeunload', (e) => {
-    if (f.store.value && getDraft(f.store.value).length) { e.preventDefault(); e.returnValue = ''; }
-  });
   $('btn-excel').addEventListener('click', exportChecklist);
-  $('btn-blank').addEventListener('click', openBlankForms);
   $('btn-print').addEventListener('click', () => {
-    if (!SECTIONS[state.section]) { toast('Επίλεξε πρώτα «ΑΝΟΙΓΜΑ» ή «ΚΛΕΙΣΙΜΟ».'); return; }
+    if (!SECTIONS[state.section]) return;
     renderPrint();
     window.print();
   });
@@ -1731,6 +1903,7 @@ async function init() {
   $('btn-reset').addEventListener('click', () => {
     if (!confirm(`Να σβηστούν όλα τα ✓/✗ και οι σημειώσεις για «${SECTIONS[state.section]}» αυτής της ημέρας;`)) return;
     lsDel(progKey());
+    $('more').open = false;
     renderChecklist();
   });
 

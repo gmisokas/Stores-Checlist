@@ -11,103 +11,112 @@ const TOUR_LS = 'cl-tour-offered';
 const TOUR_CHAPTERS = {
   basic: 'Βασικά',
   check: 'ΑΝΟΙΓΜΑ / ΚΛΕΙΣΙΜΟ',
-  log: 'ΚΑΘΑΡΙΟΤΗΤΕΣ / ΑΠΟΨΥΞΕΙΣ και ΕΚΚΡΕΜΟΤΗΤΕΣ',
-  plan: 'Πρόγραμμα μήνα (υπεύθυνος)',
+  log: 'ΚΑΘΑΡΙΟΤΗΤΕΣ / ΑΠΟΨΥΞΕΙΣ',
+  plan: 'Υπεύθυνος καταστήματος',
 };
 const tour = { steps: [], i: 0, root: null, timer: null, onClick: null, onChange: null };
 
 const q = (sel) => document.querySelector(sel);
-const fieldOf = (id) => () => { const el = $(id); return el && el.closest('label'); };
-const logButton = (text) => () => [...document.querySelectorAll('#log-view .actions button')].find((b) => b.textContent.includes(text));
+const homeTile = (sec) => `#home .tile[data-section="${sec}"]`;
+const mgrItem = (text) => () => [...document.querySelectorAll('#log-view .mgr-item')].find((b) => b.textContent.includes(text));
+const doneBox = () => {
+  const t = [...document.querySelectorAll('#log-view .box h2')].find((x) => x.textContent.startsWith('✅ Έγιναν'));
+  return t && t.closest('.box');
+};
 
 // sec: σε ποια οθόνη πρέπει να βρίσκεται η εφαρμογή για το βήμα (και όταν πατηθεί «Πίσω»).
 // act: next = κουμπί «Επόμενο» · click = πατάει το φωτισμένο σημείο · cond = κάνει κάτι (π.χ. επιλογή) και συνεχίζει μόνο του.
 const TOUR_STEPS = [
-  { ch: 'basic', sec: 'none', sel: fieldOf('f-date'), act: 'next', title: 'Ημερομηνία',
-    text: 'Συμπληρώνεται μόνη της με τη σημερινή. Η ημέρα αλλάζει στις 05:00, ώστε ένα κλείσιμο μετά τα μεσάνυχτα να μετράει για την ίδια βάρδια.' },
-  { ch: 'basic', sec: 'none', sel: fieldOf('f-name'), act: 'next', title: 'Υπεύθυνος',
-    text: 'Γράφεις το ονοματεπώνυμό σου μία φορά. Το κινητό το θυμάται και φαίνεται σε ό,τι στέλνεις.' },
-  { ch: 'basic', sec: 'none', sel: fieldOf('f-store'), act: 'next', title: 'Κατάστημα',
-    text: 'Διαλέγεις το κατάστημά σου. Τώρα είσαι στο DEMO, για δοκιμή. Κάθε κατάστημα έχει και τις δικές του γραμμές (με κίτρινο).' },
-  { ch: 'basic', sec: 'none', sel: '#section-seg', act: 'next', title: 'Οι 4 ενότητες',
-    text: 'ΑΝΟΙΓΜΑ και ΚΛΕΙΣΙΜΟ: τα checklist της βάρδιας. ΚΑΘΑΡΙΟΤΗΤΕΣ / ΑΠΟΨΥΞΕΙΣ: καταχώρηση. ΕΚΚΡΕΜΟΤΗΤΕΣ: ό,τι πρέπει να γίνει, με κόκκινο αριθμό.' },
+  { ch: 'basic', sec: 'home', sel: '#who-line', act: 'next', title: 'Κατάστημα, όνομα, ημέρα',
+    text: 'Φαίνονται σε μία γραμμή. Με το ✎ τα αλλάζεις, π.χ. την ημερομηνία για καταχώρηση της χθεσινής ημέρας. Η ημέρα αλλάζει στις 05:00, ώστε ένα κλείσιμο μετά τα μεσάνυχτα να μετράει για την ίδια βάρδια.' },
+  { ch: 'basic', sec: 'home', sel: '#home .tiles', act: 'next', title: 'Οι ενότητες',
+    text: 'ΑΝΟΙΓΜΑ και ΚΛΕΙΣΙΜΟ: τα checklist της βάρδιας. ΚΑΘΑΡΙΟΤΗΤΕΣ / ΑΠΟΨΥΞΕΙΣ: οι εργασίες της ημέρας. Ο κόκκινος αριθμός δείχνει πόσες περιμένουν.' },
+  { ch: 'basic', sec: 'home', sel: '#home .mgr-btn', act: 'next', title: 'Υπεύθυνος καταστήματος',
+    text: 'Μόνο για τον/την υπεύθυνο, με κωδικό: πρόγραμμα μήνα, εξοπλισμός, κενά έντυπα και αρχείο.' },
 
-  { ch: 'check', sec: null, sel: '#section-seg [data-section="opening"]', act: 'click', title: 'ΑΝΟΙΓΜΑ',
+  { ch: 'check', sec: 'home', sel: homeTile('opening'), act: 'click', title: 'ΑΝΟΙΓΜΑ',
     text: 'Πάτα «ΑΝΟΙΓΜΑ» για να ανοίξει το checklist ανοίγματος.' },
   { ch: 'check', sec: 'opening', sel: '#items .item', act: 'next', title: 'Κάθε γραμμή, μία ενέργεια',
-    text: 'Τις κάνεις με τη σειρά. Δίπλα σε κάθε γραμμή υπάρχουν ✓, ✗ και «Σημείωση».' },
+    text: 'Τις κάνεις με τη σειρά. Σε κάθε γραμμή υπάρχουν ✓ (έγινε), ✗ (δεν έγινε) και ✎ (σημείωση).' },
   { ch: 'check', sec: 'opening', sel: '#items .item:nth-child(1) .mark.ok', act: 'click', title: '✓ Έγινε',
     text: 'Πάτα ✓ όταν η ενέργεια έγινε.' },
   { ch: 'check', sec: 'opening', sel: '#items .item:nth-child(2) .mark.no', act: 'click', title: '✗ Δεν έγινε',
     text: 'Πάτα ✗ όταν κάτι δεν έγινε.' },
-  { ch: 'check', sec: 'opening', sel: '#items .item:nth-child(2) .note-btn', act: 'click', title: 'Σημείωση',
-    text: 'Πάτα «Σημείωση» και γράψε γιατί δεν έγινε ή ό,τι πρέπει να ξέρει ο υπεύθυνος.' },
-  { ch: 'check', sec: 'opening', sel: '.sticky .progress', act: 'next', title: 'Πρόοδος',
-    text: 'Εδώ βλέπεις πόσα έγιναν και πόσα απομένουν. Η πρόοδος σώζεται στο κινητό, ακόμα κι αν κλείσει η σελίδα.' },
-  { ch: 'check', sec: 'opening', sel: '#checklist-actions', act: 'next', title: 'Στο τέλος',
-    text: '«Αποστολή στο Viber»: στέλνει τη σύνοψη και την αποθηκεύει στο αρχείο. Υπάρχουν και «Αποθήκευση στο αρχείο», Excel, εκτύπωση και «Καθαρισμός». Στο DEMO δεν στέλνεται τίποτα.' },
-  { ch: 'check', sec: null, sel: '#section-seg [data-section="closing"]', act: 'click', title: 'ΚΛΕΙΣΙΜΟ',
+  { ch: 'check', sec: 'opening', sel: '#items .item:nth-child(2) .note-btn', act: 'click', title: '✎ Σημείωση',
+    text: 'Πάτα ✎ και γράψε γιατί δεν έγινε ή ό,τι πρέπει να ξέρει ο υπεύθυνος.' },
+  { ch: 'check', sec: 'opening', sel: '#sec-bar .progress', act: 'next', title: 'Πρόοδος',
+    text: 'Πόσα συμπληρώθηκαν από όσα υπάρχουν. Η πρόοδος σώζεται στο κινητό, ακόμα κι αν κλείσει η σελίδα.' },
+  { ch: 'check', sec: 'opening', sel: '#checklist-actions', act: 'next', title: 'Ολοκλήρωση',
+    text: '«Ολοκλήρωση – Αποστολή στο Viber»: στέλνει τη σύνοψη και την αποθηκεύει στο αρχείο. Στο «⋯ Περισσότερα»: Excel / PDF, εκτύπωση, καθαρισμός. Στο DEMO δεν στέλνεται τίποτα.' },
+  { ch: 'check', sec: 'opening', sel: '#go-back', act: 'click', title: '‹ Αρχική',
+    text: 'Πάτα «‹ Αρχική» για να γυρίσεις στις ενότητες. Το ίδιο κάνει και το «πίσω» του κινητού.' },
+  { ch: 'check', sec: 'home', sel: homeTile('closing'), act: 'click', title: 'ΚΛΕΙΣΙΜΟ',
     text: 'Πάτα «ΚΛΕΙΣΙΜΟ». Δουλεύει ακριβώς όπως το ΑΝΟΙΓΜΑ.' },
   { ch: 'check', sec: 'closing', sel: '#items .item.important', act: 'next', title: 'Κόκκινες γραμμές',
     text: 'Οι κόκκινες γραμμές είναι πολύ σημαντικές. Οι κίτρινες (στα καταστήματα) είναι ιδιαιτερότητες του καταστήματος.' },
 
-  { ch: 'log', sec: null, sel: '#section-seg [data-section="todo"]', act: 'click', title: 'ΕΚΚΡΕΜΟΤΗΤΕΣ',
-    text: 'Ο κόκκινος αριθμός δείχνει πόσα θέλουν ενέργεια. Πάτα «ΕΚΚΡΕΜΟΤΗΤΕΣ».' },
-  { ch: 'log', sec: 'todo', sel: () => q('#log-view .todo-box.late') || q('#log-view .todo-box') || q('#log-view .todo'), act: 'next', title: 'Τι εκκρεμεί',
-    text: 'Εδώ μαζεύονται όλα: σε καθυστέρηση, για σήμερα, τικ που δεν αποθηκεύτηκαν και οι ειδοποιήσεις. Σε καθυστέρηση = η ημέρα του προγράμματος πέρασε και δεν έγινε.' },
-  { ch: 'log', sec: 'todo', sel: '#log-view .todo .actions .btn.primary', act: 'click', title: 'Πάμε για καταχώρηση',
-    text: 'Η καταχώρηση γίνεται στις ΚΑΘΑΡΙΟΤΗΤΕΣ / ΑΠΟΨΥΞΕΙΣ. Πάτα το κουμπί.' },
-  { ch: 'log', sec: 'log', sel: '.log-type', act: 'next', title: 'Είδος',
-    text: 'Διαλέγεις «Γενική καθαριότητα» ή «Απόψυξη».' },
-  { ch: 'log', sec: 'log', sel: '.log-grid select', act: 'cond', check: () => state.logSel && state.logSel.eq === 'apothiki', title: 'Εξοπλισμός / χώρος',
-    text: 'Διάλεξε «Αποθήκη» από τη λίστα. Για καταψύξεις, ψυγεία και βιτρίνες διαλέγεις και Νο.' },
-  { ch: 'log', sec: 'log', sel: '.log-tick', act: 'click', title: '✓ Αν έγινε, πατήστε',
-    text: 'Πάτα ✓. Η εργασία μπαίνει στη λίστα «Προς αποθήκευση».' },
-  { ch: 'log', sec: 'log', sel: '.save-log', act: 'click', title: 'Αποθήκευση στο αρχείο',
-    text: 'Στο τέλος πάτα «Αποθήκευση στο αρχείο». Από κάτω γράφει «✓ Έγινε αποστολή». Μέχρι τότε τα τικ περιμένουν στο κινητό.' },
-  { ch: 'log', sec: 'log', sel: '.skip-link', act: 'next', title: 'Δεν έγινε; Δήλωσε αιτία',
-    text: 'Αν μια εργασία δεν μπορεί να γίνει (βλάβη, κλειστό κατάστημα, άλλο), τη δηλώνεις εδώ με την αιτία. Τότε δεν μετράει ως καθυστέρηση.' },
-  { ch: 'log', sec: 'log', sel: 'details.cal', act: 'next', title: 'Ημερολόγιο',
+  { ch: 'log', sec: 'home', sel: homeTile('log'), act: 'click', title: 'ΚΑΘΑΡΙΟΤΗΤΕΣ / ΑΠΟΨΥΞΕΙΣ',
+    text: 'Ο αριθμός δείχνει πόσες εργασίες περιμένουν. Πάτα το πλακίδιο.' },
+  { ch: 'log', sec: 'log', sel: () => q('#log-view .todo-box.late') || q('#log-view .todo-box'), act: 'next', title: 'Τι πρέπει να γίνει',
+    text: 'Σε καθυστέρηση: η ημέρα τους πέρασε και δεν έγιναν. Σήμερα: οι εργασίες της ημέρας από το πρόγραμμα.' },
+  { ch: 'log', sec: 'log', sel: () => q('#log-view .task.act .task-tick'), act: 'click', title: '✓ Έγινε',
+    text: 'Μόλις γίνει μια εργασία, πάτα ✓. Αποθηκεύεται αμέσως.' },
+  { ch: 'log', sec: 'log', sel: doneBox, act: 'next', title: 'Έγιναν σήμερα',
+    text: 'Εδώ φαίνονται όσα καταχωρήθηκαν. Λάθος; Το ✕ τη σβήνει, την ίδια ημέρα.' },
+  { ch: 'log', sec: 'log', sel: () => q('#log-view .task-more'), act: 'next', title: '⋯ Δεν έγινε;',
+    text: 'Αν μια εργασία δεν μπορεί να γίνει (βλάβη, κλειστό κατάστημα, άλλο), πάτα ⋯ και δήλωσε την αιτία. Τότε δεν μετράει ως καθυστέρηση.' },
+  { ch: 'log', sec: 'log', sel: '#log-view .other-task', act: 'next', title: '+ Άλλη εργασία',
+    text: 'Για εργασία που δεν είναι στη λίστα, π.χ. έγινε νωρίτερα ή επιπλέον.' },
+  { ch: 'log', sec: 'log', sel: '#log-view details.cal', act: 'next', title: 'Όλος ο μήνας',
     text: 'Το πρόγραμμα του μήνα: πράσινο = έγιναν, κίτρινο = καθυστέρηση, κόκκινο = δεν έγιναν.' },
-  { ch: 'log', sec: 'log', sel: '#log-view .log > .actions', act: 'next', title: 'Υπόλοιπα κουμπιά',
-    text: 'Αποστολή στο Viber (τι έγινε σήμερα), Excel, «Εξοπλισμός καταστήματος» (μόνο ο/η υπεύθυνος), «Πρόγραμμα μήνα» και «Αρχείο» (με κωδικό).' },
+  { ch: 'log', sec: 'log', sel: '#log-view .log > .actions', act: 'next', title: 'Αποστολή στο Viber',
+    text: 'Στέλνει τι έγινε σήμερα και τι εκκρεμεί.' },
 
-  { ch: 'plan', sec: 'log', sel: logButton('Πρόγραμμα μήνα'), act: 'click', title: 'Πρόγραμμα μήνα',
-    text: 'Για τον/την υπεύθυνο καταστήματος, με δικό του κωδικό (στο DEMO χωρίς κωδικό). Πάτα το κουμπί.' },
+  { ch: 'plan', sec: 'home', sel: '#home .mgr-btn', act: 'click', title: 'Υπεύθυνος καταστήματος',
+    text: 'Πάτα το κουμπί. Στο κατάστημά σου ζητά τον κωδικό υπευθύνου· στο DEMO όχι.' },
+  { ch: 'plan', sec: 'manager', sel: '#log-view .mgr-list', act: 'next', title: 'Εργαλεία υπευθύνου',
+    text: 'Πρόγραμμα μήνα, εξοπλισμός καταστήματος, κενά έντυπα για εκτύπωση, ο μήνας σε Excel / PDF και το αρχείο.' },
+  { ch: 'plan', sec: 'manager', sel: mgrItem('Πρόγραμμα μήνα'), act: 'click', title: 'Πρόγραμμα μήνα',
+    text: 'Πάτα «Πρόγραμμα μήνα».' },
+  { ch: 'plan', sec: 'plan', sel: '#log-view .plan-bulk', act: 'next', title: 'Για όλο τον εξοπλισμό',
+    text: 'Αυτόματη κατανομή όλων, ίδιο πρόγραμμα με τον προηγούμενο μήνα ή αφαίρεση όλων. Αλλάζουν μόνο από σήμερα και μετά.' },
   { ch: 'plan', sec: 'plan', sel: () => document.querySelectorAll('.planner select')[1], act: 'next', title: 'Εξοπλισμός / χώρος',
-    text: 'Διαλέγεις ποιον εξοπλισμό προγραμματίζεις. Το ✓ δείχνει ότι καλύπτει τις οδηγίες, το ⚠️ ότι λείπουν ημέρες.' },
+    text: 'Διαλέγεις ποιον εξοπλισμό βλέπεις. Το ✓ δείχνει ότι καλύπτει τις οδηγίες, το ⚠️ ότι λείπουν ημέρες.' },
   { ch: 'plan', sec: 'plan', sel: '.planner .plan-status', act: 'next', title: 'Τι χρειάζεται',
     text: 'Πόσες φορές μπήκαν σε κάθε εβδομάδα σε σχέση με όσες ορίζονται (π.χ. «15–21: 1/1 ✓»).' },
   { ch: 'plan', sec: 'plan', sel: '.planner .cal-grid', act: 'next', title: 'Ημέρες',
     text: 'Πατάς τις ημέρες που θα γίνει η εργασία· ξαναπατάς για να τη βγάλεις. Οι ημέρες πριν από σήμερα κλειδώνουν και δείχνουν τι έγινε.' },
-  { ch: 'plan', sec: 'plan', sel: '.planner .btn.auto', act: 'next', title: 'Αυτόματη κατανομή',
-    text: 'Η εφαρμογή μοιράζει μόνη της τις ημέρες για τον εξοπλισμό που φαίνεται. Από κάτω, η «Αφαίρεση όλων των εργασιών του μήνα». Και τα δύο αλλάζουν μόνο από σήμερα και μετά.' },
-  { ch: 'plan', sec: 'plan', sel: '.planner > .actions', act: 'next', title: 'Αποθήκευση προγράμματος',
-    text: 'Αν λείπουν ημέρες, δεν αποθηκεύεται και φαίνεται τι λείπει. Υπάρχει και «Αντιγραφή από τον προηγούμενο μήνα». Στο DEMO αποθηκεύεται μόνο για δοκιμή.' },
+  { ch: 'plan', sec: 'plan', sel: '.planner .plan-save', act: 'next', title: 'Αποθήκευση προγράμματος',
+    text: 'Μένει πάντα κάτω. Αν λείπουν ημέρες, δεν αποθηκεύεται και φαίνεται τι λείπει. Στο DEMO αποθηκεύεται μόνο για δοκιμή.' },
 ];
+
+// Από ενότητα σε ενότητα χωρίς να περάσει από την αρχική (ίδιο βήμα στο ιστορικό).
+function tourGo(sec) {
+  if (!state.section) { openSection(sec); return; }
+  state.section = sec;
+  state.logMode = 'main';
+  state.planEdit = null;
+  state.logSkip = null;
+  renderChecklist();
+  window.scrollTo(0, 0);
+}
 
 // Η εφαρμογή στην οθόνη που χρειάζεται το βήμα.
 function tourEnsure(sec) {
   if (!sec) return;
-  if (sec === 'none') {
-    if (state.section) { state.section = ''; renderChecklist(); }
+  if (sec === 'home') {
+    if (state.section) { goHome(); renderChecklist(); }
+    return;
+  }
+  if (sec === 'manager') {
+    if (state.section !== 'manager' || managerSub()) tourGo('manager');
     return;
   }
   if (sec === 'plan') {
-    if (state.section !== 'log' || state.logMode !== 'plan') { state.section = 'log'; renderChecklist(); openPlanner(DEMO_ID); }
+    if (state.section !== 'manager' || state.logMode !== 'plan') { tourGo('manager'); openPlanner(DEMO_ID); }
     return;
   }
-  if (sec === 'log') {
-    if (state.section !== 'log' || state.logMode !== 'main') {
-      state.section = 'log';
-      state.logMode = 'main';
-      state.planEdit = null;
-      state.logType = 'clean';
-      renderChecklist();
-    }
-    return;
-  }
-  if (state.section !== sec) { state.section = sec; renderChecklist(); }
+  if (state.section !== sec) tourGo(sec);
 }
 
 function tourTarget(step) {
@@ -204,10 +213,7 @@ function tourTick() {
 }
 
 function tourStart(ch) {
-  if (!isDemo()) {
-    f.store.value = DEMO_ID;
-    f.store.dispatchEvent(new Event('change'));
-  }
+  enterDemo();
   tourStop();
   tour.steps = TOUR_STEPS.filter((s) => !ch || s.ch === ch);
   // Το πάτημα στο φωτισμένο σημείο ελέγχεται πριν το χειριστεί η εφαρμογή (η οθόνη μπορεί να ξαναχτιστεί)
@@ -268,12 +274,7 @@ function tourEnd() {
       h('button', { type: 'button', class: 'btn ghost', onclick: tourStop }, 'Μένω στο DEMO')]);
 }
 
-function tourLeave() {
-  tourStop();
-  f.store.value = lsGet(LS.last, {}).store || '';
-  f.store.dispatchEvent(new Event('change'));
-  window.scrollTo(0, 0);
-}
+function tourLeave() { leaveDemo(); }
 
 // Την πρώτη φορά σε κάθε κινητό: πρόταση για περιήγηση (μετά τις οδηγίες εγκατάστασης, αν ανοίξουν).
 function initTour() {
@@ -283,8 +284,8 @@ function initTour() {
   const offer = () => {
     lsSet(TOUR_LS, true);
     tourModal('Καλώς ήρθες! 👋',
-      'Θέλεις μια γρήγορη περιήγηση για το τι κάνει κάθε κουμπί; Γίνεται στο DEMO, χωρίς να αποθηκεύεται ή να στέλνεται τίποτα. Υπάρχει πάντα στο «Κατάστημα» → DEMO.',
-      [h('button', { type: 'button', class: 'btn dark', onclick: () => { tourStop(); f.store.value = DEMO_ID; f.store.dispatchEvent(new Event('change')); } }, 'Ναι, ξεκίνα'),
+      'Θέλεις μια γρήγορη περιήγηση για το τι κάνει κάθε κουμπί; Γίνεται στο DEMO, χωρίς να αποθηκεύεται ή να στέλνεται τίποτα. Υπάρχει πάντα κάτω στην αρχική: «🎓 Εκπαίδευση».',
+      [h('button', { type: 'button', class: 'btn dark', onclick: () => { tourStop(); enterDemo(); } }, 'Ναι, ξεκίνα'),
         h('button', { type: 'button', class: 'btn ghost', onclick: tourStop }, 'Όχι τώρα')]);
   };
   const a2hs = $('a2hs');

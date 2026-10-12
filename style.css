@@ -650,3 +650,20 @@ button:not(:disabled):active, a.btn:not([aria-disabled="true"]):active { transfo
   border-top: 1px solid var(--line);
 }
 .plan-save .btn { width: 100%; }
+
+/* Επιβεβαίωση καταστήματος */
+.store-confirm p { margin: 6px 0; }
+.store-name {
+  margin: 10px 0 4px;
+  padding: 12px;
+  border-radius: 10px;
+  background: var(--brand-soft);
+  color: var(--brand);
+  font-size: 24px;
+  font-weight: 800;
+  letter-spacing: 1px;
+  text-align: center;
+  -webkit-user-select: none;
+  user-select: none;
+}
+.store-confirm .field input { font-size: 18px; text-transform: uppercase; }

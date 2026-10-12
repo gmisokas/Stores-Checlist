@@ -2011,7 +2011,7 @@ function eqCountFields(all, counts) {
 /* ---------- Κενά έντυπα για εκτύπωση ---------- */
 
 // Ένα αρχείο με 4 καρτέλες χωρίς καταχωρήσεις: Άνοιγμα, Κλείσιμο, Γενική καθαριότητα, Απόψυξη.
-// Κάθε καρτέλα χωράει σε μία σελίδα A4 οριζόντια.
+// Κάθε καρτέλα χωράει σε μία σελίδα A4: Άνοιγμα/Κλείσιμο κάθετα, καθαριότητες/αποψύξεις οριζόντια.
 function openBlankForms() {
   const sk = f.store.value;
   if (!sk) { toast('Επίλεξε πρώτα κατάστημα.'); return; }
@@ -2037,7 +2037,7 @@ function openBlankForms() {
   $('log-dialog-body').replaceChildren(...[
     h('h2', {}, 'Κενά έντυπα για εκτύπωση'),
     h('p', { class: 'hint' }, label),
-    h('p', { class: 'hint' }, 'Ένα αρχείο με 4 καρτέλες χωρίς καταχωρήσεις: Άνοιγμα, Κλείσιμο, Γενική καθαριότητα, Απόψυξη. Κάθε καρτέλα χωράει σε μία σελίδα A4 οριζόντια.'),
+    h('p', { class: 'hint' }, 'Ένα αρχείο με 4 καρτέλες χωρίς καταχωρήσεις: Άνοιγμα, Κλείσιμο, Γενική καθαριότητα, Απόψυξη. Κάθε καρτέλα χωράει σε μία σελίδα A4: Άνοιγμα και Κλείσιμο κάθετα, καθαριότητες και αποψύξεις οριζόντια.'),
     h('label', { class: 'field' }, 'Μήνας (για καθαριότητες και αποψύξεις)', selMonth),
     h('p', { class: 'hint' }, setup ? 'Εξοπλισμός: όπως έχει δηλωθεί στο κατάστημα. Αλλάζεις αν θέλεις.' : 'Δεν έχει δηλωθεί εξοπλισμός σε αυτό το κινητό. Διάλεξε πόσα από το καθένα.'),
     eqCountFields(all, counts),
@@ -2055,7 +2055,7 @@ function blankChecklistSheet(section, store, label) {
   const rows = buildRows(section, store);
   const s = sheetRows();
   s.add([[0, `Checklist ${SECTIONS[section]} – ${label} – Lartecono DaVinci`, XS.title]]);
-  s.add([[0, 'Ημερομηνία: ____________________________          Υπεύθυνος: ______________________________________________', XS.label]], 28);
+  s.add([[0, 'Ημερομηνία: ______________________          Υπεύθυνος: ____________________________________', XS.label]], 28);
   s.skip();
   s.add([[0, '#', XS.head], [1, 'Ενέργεια', XS.head], [2, '✓', XS.head], [3, '✗', XS.head], [4, 'Σημειώσεις', XS.head]]);
   const headRow = s.r;
@@ -2065,7 +2065,7 @@ function blankChecklistSheet(section, store, label) {
     s.add([[0, i + 1, ctr], [1, x.text, textStyle], [2, '', ctr], [3, '', ctr], [4, '', x.extra ? XS.xCell : XS.cell]]);
   });
   if (rows.some((x) => x.extra)) s.add([[0, 'Οι κίτρινες γραμμές αφορούν ιδιαιτερότητες του συγκεκριμένου καταστήματος.', 0]]);
-  const sheet = makeSheet(SECTIONS[section], s, [[1, 1, 4], [2, 2, 120], [3, 4, 5], [5, 5, 40]], '', 'landscape', [headRow, headRow], true);
+  const sheet = makeSheet(SECTIONS[section], s, [[1, 1, 4], [2, 2, 85], [3, 4, 5], [5, 5, 28]], '', 'portrait', [headRow, headRow], true);
   sheet.grow = 1; // στο PDF η «Ενέργεια» φαρδαίνει όσο χρειάζεται για να γεμίσει τη σελίδα
   return sheet;
 }

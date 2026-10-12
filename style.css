@@ -117,7 +117,8 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .t-closing { border-color: var(--no); background: var(--no-soft); }
 .t-closing .tile-name { color: #b3261e; }
 .t-log { border-color: var(--brand); background: var(--brand-soft); }
-.mgr-btn { display: block; width: 100%; margin-top: 16px; }
+.home-btn { display: block; width: 100%; margin-top: 16px; }
+.mgr-btn { display: block; width: 100%; margin-top: 10px; }
 
 /* ---------- Μπάρα ενότητας ---------- */
 .sec-bar {

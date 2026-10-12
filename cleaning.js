@@ -1290,7 +1290,7 @@ function managerUnlockForm(sk) {
   setTimeout(() => pw.focus(), 0);
   return h('div', { class: 'log' }, h('form', { class: 'box', onsubmit: go },
     h('h2', {}, storeLabel()),
-    h('p', { class: 'hint' }, 'Μόνο για τον/την υπεύθυνο καταστήματος: πρόγραμμα μήνα, εξοπλισμός, κενά έντυπα, αρχείο.'),
+    h('p', { class: 'hint' }, 'Μόνο για τον/την υπεύθυνο καταστήματος: πρόγραμμα μήνα, εξοπλισμός, αρχείο.'),
     h('label', { class: 'field' }, 'Κωδικός υπευθύνου', pw),
     btn));
 }
@@ -1311,7 +1311,6 @@ function managerMenu(sk, setup) {
       item('📅', 'Πρόγραμμα μήνα', 'Ημέρες καθαριοτήτων και αποψύξεων', needEquip(() => openPlanner(sk))),
       item('🧊', 'Εξοπλισμός καταστήματος', setup ? 'Καταψύξεις, βιτρίνες, μηχανήματα, χώροι' : 'Δήλωση: καταψύξεις, βιτρίνες, μηχανήματα, χώροι',
         () => { state.logMode = 'setup'; renderLog(); scrollToLog(); }),
-      item('🖨', 'Κενά έντυπα', 'Για εκτύπωση: άνοιγμα, κλείσιμο, καθαριότητες, αποψύξεις (Excel / PDF)', openBlankForms),
       item('📊', 'Ο μήνας σε Excel / PDF', 'Τι έγινε και τι όχι, ανά ημέρα', needEquip(() => openLogExport(sk, ym, deviceSrc(sk), shared() ? 2 : 13))),
       item('🔒', 'Αρχείο', 'Όλα τα καταστήματα · με τον κωδικό αρχείου (area manager)', openArchive)),
     syncOn() && !isDemo() ? h('section', { class: 'actions' },

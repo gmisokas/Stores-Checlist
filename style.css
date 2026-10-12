@@ -413,6 +413,7 @@ dialog textarea { width: 100%; }
 .log-remind { margin: 0 0 12px; padding: 10px 12px; background: #fff8e1; border: 1px solid var(--extra-line); border-radius: 10px; font-size: 15px; }
 .log .log-remind { margin: 0; }
 .linkbtn { padding: 0; border: 0; background: none; color: var(--brand); font-weight: 700; text-decoration: underline; }
+.log-alert .linkbtn { text-align: left; font-weight: 600; color: inherit; }
 .fail-list { max-height: 240px; overflow: auto; font-size: 14px; }
 .fail-list ul { margin: 4px 0 8px; padding-left: 20px; }
 .fail-type { margin-top: 6px; font-weight: 700; }
@@ -547,3 +548,6 @@ button:not(:disabled):active, a.btn:not([aria-disabled="true"]):active { transfo
 
 /* Προσαρμογή: γενική γραμμή που δεν ισχύει στο κατάστημα */
 .ed-row.off { opacity: .7; border-style: dashed; }
+
+/* Κωδικός υπευθύνου: τελείες χωρίς αυτόματη συμπλήρωση από τον browser */
+.pw-mask { -webkit-text-security: disc; text-security: disc; }

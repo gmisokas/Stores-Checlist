@@ -7,7 +7,7 @@
    ========================================================== */
 
 // Έκδοση της εφαρμογής. Σε κάθε αλλαγή: ίδιος αριθμός εδώ, στο version.json και στα ?v= του index.html.
-const APP_VERSION = '25';
+const APP_VERSION = '26';
 // Οι ενότητες γράφονται πάντα με κεφαλαία (ΑΝΟΙΓΜΑ, ΚΛΕΙΣΙΜΟ, ΚΑΘΑΡΙΟΤΗΤΕΣ / ΑΠΟΨΥΞΕΙΣ, ΕΚΚΡΕΜΟΤΗΤΕΣ).
 const SECTIONS = { opening: 'ΑΝΟΙΓΜΑ', closing: 'ΚΛΕΙΣΙΜΟ' };
 const GENERAL_ID = '__general';
@@ -667,38 +667,30 @@ const XLSX_STYLES = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>
 </styleSheet>`;
 
-function buildXlsx() {
-  const s = stats();
-  const rowsXml = [];
-  let r = 0;
-  const cell = (col, v, style) => {
-    if (typeof v === 'number') return `<c r="${col}${r}" s="${style}"><v>${v}</v></c>`;
-    return `<c r="${col}${r}" s="${style}" t="inlineStr"><is><t xml:space="preserve">${xmlEsc(v)}</t></is></c>`;
-  };
-  const row = (cells) => { r++; rowsXml.push(`<row r="${r}">${cells.map((c) => cell(...c)).join('')}</row>`); };
-
-  row([['A', `Checklist καταστήματος – ${SECTIONS[state.section]} – Lartecono DaVinci`, XS.title]]);
-  row([['A', `Ημερομηνία: ${fmtDate(f.date.value)}`, XS.label]]);
-  row([['A', `Υπεύθυνος: ${f.name.value.trim()}`, XS.label]]);
-  row([['A', `Κατάστημα: ${storeLabel()}`, XS.label]]);
-  r++;
-  row([['A', '#', XS.head], ['B', 'Ενέργεια', XS.head], ['C', '✓', XS.head], ['D', '✗', XS.head], ['E', 'Σημειώσεις', XS.head]]);
-  const headRow = r;
-  s.rows.forEach((x, i) => {
-    const p = s.prog[x.key] || {};
+// Το φύλλο της ενότητας που φαίνεται (Άνοιγμα ή Κλείσιμο), με ό,τι έχει συμπληρωθεί. Για Excel και PDF.
+function checklistSheet() {
+  const st = stats();
+  const s = sheetRows();
+  s.add([[0, `Checklist καταστήματος – ${SECTIONS[state.section]} – Lartecono DaVinci`, XS.title]]);
+  s.add([[0, `Ημερομηνία: ${fmtDate(f.date.value)}`, XS.label]]);
+  s.add([[0, `Υπεύθυνος: ${f.name.value.trim()}`, XS.label]]);
+  s.add([[0, `Κατάστημα: ${storeLabel()}`, XS.label]]);
+  s.skip();
+  s.add([[0, '#', XS.head], [1, 'Ενέργεια', XS.head], [2, '✓', XS.head], [3, '✗', XS.head], [4, 'Σημειώσεις', XS.head]]);
+  const headRow = s.r;
+  st.rows.forEach((x, i) => {
+    const p = st.prog[x.key] || {};
     const textStyle = x.important ? (x.extra ? XS.impX : XS.imp) : (x.extra ? XS.xCell : XS.cell);
     const ctr = x.extra ? XS.xCenter : XS.center;
-    row([['A', i + 1, ctr], ['B', x.text, textStyle], ['C', p.s === 'ok' ? '✓' : '', ctr],
-      ['D', p.s === 'no' ? '✗' : '', ctr], ['E', p.n || '', x.extra ? XS.xCell : XS.cell]]);
+    s.add([[0, i + 1, ctr], [1, x.text, textStyle], [2, p.s === 'ok' ? '✓' : '', ctr],
+      [3, p.s === 'no' ? '✗' : '', ctr], [4, p.n || '', x.extra ? XS.xCell : XS.cell]]);
   });
-  if (s.rows.some((x) => x.extra)) {
-    r++;
-    row([['A', 'Οι κίτρινες γραμμές αφορούν ιδιαιτερότητες του συγκεκριμένου καταστήματος.', 0]]);
+  if (st.rows.some((x) => x.extra)) {
+    s.skip();
+    s.add([[0, 'Οι κίτρινες γραμμές αφορούν ιδιαιτερότητες του συγκεκριμένου καταστήματος.', 0]]);
   }
-
-  const cols = '<col min="1" max="1" width="5" customWidth="1"/><col min="2" max="2" width="70" customWidth="1"/><col min="3" max="4" width="5" customWidth="1"/><col min="5" max="5" width="35" customWidth="1"/>';
   const pane = `ySplit="${headRow}" topLeftCell="A${headRow + 1}" activePane="bottomLeft"`;
-  return xlsxBlob([{ name: SECTIONS[state.section], xml: sheetXml(rowsXml, cols, pane, 'portrait') }]);
+  return makeSheet(SECTIONS[state.section], s, [[1, 1, 5], [2, 2, 70], [3, 4, 5], [5, 5, 35]], pane, 'portrait', [headRow, headRow]);
 }
 
 // Ένα φύλλο: γραμμές XML, πλάτη στηλών, «πάγωμα» κεφαλίδας, προσανατολισμός A4.
@@ -735,12 +727,196 @@ function toLatin(str) {
     .replace(/[α-ω]/g, (c) => map[c] || '').toUpperCase();
 }
 
-async function exportExcel() {
+// «Αποθήκευση σε Excel / PDF» του checklist: διαλέγεις μορφή αρχείου.
+function exportChecklist() {
   if (!SECTIONS[state.section]) { toast('Επίλεξε πρώτα «ΑΝΟΙΓΜΑ» ή «ΚΛΕΙΣΙΜΟ».'); return; }
-  const blob = buildXlsx();
-  const sec = state.section === 'opening' ? 'anoigma' : 'kleisimo';
-  const store = toLatin(storeLabel() || 'xoris-katastima').replace(/[^A-Za-z0-9-]+/g, '-');
-  await deliverFile(blob, `checklist_${store}_${sec}_${f.date.value}.xlsx`);
+  const dlg = $('log-dialog');
+  const save = async (kind) => {
+    dlg.close();
+    const sheet = checklistSheet();
+    const sec = state.section === 'opening' ? 'anoigma' : 'kleisimo';
+    const store = toLatin(storeLabel() || 'xoris-katastima').replace(/[^A-Za-z0-9-]+/g, '-');
+    await deliverFile(kind === 'pdf' ? pdfBlob([sheet]) : xlsxBlob([sheet]), `checklist_${store}_${sec}_${f.date.value}.${kind}`);
+  };
+  $('log-dialog-body').replaceChildren(
+    h('h2', {}, 'Αποθήκευση σε Excel ή PDF'),
+    h('p', { class: 'hint' }, `${SECTIONS[state.section]}${storeLabel() ? ' · ' + storeLabel() : ''} · ${fmtDate(f.date.value)}. Με ό,τι έχει συμπληρωθεί.`),
+    h('div', { class: 'stack' },
+      h('button', { type: 'button', class: 'btn dark', onclick: () => save('xlsx') }, 'Αποθήκευση σε Excel'),
+      h('button', { type: 'button', class: 'btn dark', onclick: () => save('pdf') }, 'Αποθήκευση σε PDF'),
+      h('button', { type: 'button', class: 'btn ghost', onclick: () => dlg.close() }, 'Άκυρο')));
+  dlg.showModal();
+}
+
+/* ---------- Αποθήκευση σε PDF (A4) ---------- */
+
+// Τα φύλλα του Excel ζωγραφίζονται σε σελίδες A4 (κάθετες· το μηνιαίο πρόγραμμα οριζόντιο, όπως στο Excel)
+// και μπαίνουν ως εικόνες σε αρχείο PDF. Χωρίς εξωτερική βιβλιοθήκη, δουλεύει και χωρίς σύνδεση.
+const PDF_FONT = '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif';
+// Ίδια εμφάνιση με τα στυλ του Excel (XS): b έντονα, c χρώμα, bg φόντο, box περίγραμμα, mid στο κέντρο, wrap αναδίπλωση.
+const PDF_ST = {
+  0: {}, 1: { b: 1, size: 18.7 }, 2: { b: 1 },
+  3: { b: 1, bg: '#E0E0E0', box: 1, mid: 1, wrap: 1 }, 4: { box: 1, wrap: 1 }, 5: { box: 1, mid: 1 },
+  6: { bg: '#FFF3C4', box: 1, wrap: 1 }, 7: { bg: '#FFF3C4', box: 1, mid: 1 },
+  8: { b: 1, c: '#C62828', box: 1, wrap: 1 }, 9: { b: 1, c: '#C62828', bg: '#FFF3C4', box: 1, wrap: 1 },
+  10: { box: 1, mid: 1 }, 11: { bg: '#D6E6FF', box: 1, mid: 1 }, 12: { b: 1, c: '#2E7D32', bg: '#C8E6C9', box: 1, mid: 1 },
+  13: { bg: '#F0F0F0', box: 1, mid: 1 }, 14: { b: 1, bg: '#BDBDBD', box: 1, mid: 1 }, 15: { b: 1, c: '#C62828', box: 1, mid: 1 },
+  16: { b: 1, c: '#2E7D32', box: 1, mid: 1 }, 17: { b: 1, bg: '#FFE0B2', box: 1, mid: 1 },
+  18: { b: 1, c: '#C62828', bg: '#FDEAEA', box: 1, mid: 1 }, 19: { b: 1, bg: '#E0E0E0', box: 1, mid: 1 },
+};
+
+// Αναδίπλωση κειμένου στο πλάτος w (σπάει και πολύ μεγάλες λέξεις).
+function pdfWrap(ctx, text, w) {
+  const out = [];
+  String(text).split('\n').forEach((para) => {
+    let line = '';
+    para.split(' ').forEach((word) => {
+      const next = line ? line + ' ' + word : word;
+      if (ctx.measureText(next).width <= w || !line) line = next;
+      else { out.push(line); line = word; }
+      while (ctx.measureText(line).width > w && line.length > 1) {
+        let i = line.length - 1;
+        while (i > 1 && ctx.measureText(line.slice(0, i)).width > w) i--;
+        out.push(line.slice(0, i));
+        line = line.slice(i);
+      }
+    });
+    out.push(line);
+  });
+  return out;
+}
+
+// Ένα φύλλο → σελίδες (canvas). Μονάδες σχεδίασης: pixel του Excel (πλάτος στήλης w ≈ 7w + 5).
+function sheetPages(sheet) {
+  const R = 2.5; // pixel του canvas ανά point
+  const land = sheet.orientation === 'landscape';
+  const PW = land ? 841.89 : 595.28;
+  const PH = land ? 595.28 : 841.89;
+  const M = 28; // περιθώριο ~1 εκ.
+  const widths = [];
+  sheet.cols.forEach(([a, b, w]) => { for (let c = a; c <= b; c++) widths[c - 1] = Math.round(w * 7 + 5); });
+  for (let c = 0; c < widths.length; c++) if (!widths[c]) widths[c] = 69;
+  const xs = [0];
+  widths.forEach((w, i) => { xs[i + 1] = xs[i] + w; });
+  const total = xs[widths.length];
+  const k = Math.min(1, (PW - 2 * M) / (total * 0.75)) * 0.75; // pixel → point
+  const areaH = (PH - 2 * M - 14) / k;
+  const FS = 14.7; // 11 pt
+  const PAD = 4;
+  const measure = document.createElement('canvas').getContext('2d');
+  const fontOf = (st, size) => `${st.b ? 'bold ' : ''}${size || st.size || FS}px ${PDF_FONT}`;
+
+  // Διάταξη κάθε γραμμής: κελιά με γραμμές κειμένου και ύψος.
+  const layout = (cells) => {
+    if (!cells) return { h: 12, cells: [] };
+    let hgt = 0;
+    const out = cells.map(([col, v, s]) => {
+      const st = PDF_ST[s] || {};
+      const x = xs[col] || 0;
+      const w = st.box ? widths[col] : total - x; // χωρίς περίγραμμα το κείμενο απλώνεται δεξιά
+      const text = v == null ? '' : String(v);
+      // Σε στενή στήλη, λέξη που δεν χωράει μικραίνει (έως 70%) αντί να κοπεί.
+      let size = st.size || FS;
+      measure.font = fontOf(st, size);
+      if (st.box) {
+        const widest = Math.max(0, ...text.split(/\s+/).map((wd) => measure.measureText(wd).width));
+        if (widest > w - 2 * PAD) size = Math.max(size * 0.7, (size * 0.96 * (w - 2 * PAD)) / widest);
+        measure.font = fontOf(st, size);
+      }
+      const lines = text === '' ? [] : (st.wrap || !st.box ? pdfWrap(measure, text, w - 2 * PAD) : [text]);
+      const lh = size * 1.3;
+      hgt = Math.max(hgt, Math.max(1, lines.length) * lh + 2 * PAD);
+      return { x, w, st, lines, lh, size };
+    });
+    return { h: Math.ceil(hgt), cells: out };
+  };
+  const rows = sheet.rows.map(layout);
+  const head = sheet.head ? [sheet.head[0] - 1, sheet.head[1] - 1] : null;
+
+  // Μοίρασμα σε σελίδες· η κεφαλίδα του πίνακα επαναλαμβάνεται σε κάθε σελίδα.
+  const pages = [[]];
+  let y = 0;
+  rows.forEach((r, i) => {
+    if (y + r.h > areaH && pages[pages.length - 1].length) {
+      pages.push([]);
+      y = 0;
+      if (head && i > head[1]) for (let j = head[0]; j <= head[1]; j++) { pages[pages.length - 1].push(j); y += rows[j].h; }
+    }
+    pages[pages.length - 1].push(i);
+    y += r.h;
+  });
+
+  return pages.map((list) => {
+    const cv = document.createElement('canvas');
+    cv.width = Math.round(PW * R);
+    cv.height = Math.round(PH * R);
+    const ctx = cv.getContext('2d');
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(0, 0, cv.width, cv.height);
+    ctx.setTransform(R * k, 0, 0, R * k, M * R, M * R);
+    ctx.textBaseline = 'top';
+    let yy = 0;
+    list.forEach((i) => {
+      const r = rows[i];
+      r.cells.forEach((c) => {
+        if (c.st.bg) { ctx.fillStyle = c.st.bg; ctx.fillRect(c.x, yy, c.w, r.h); }
+        if (c.st.box) { ctx.strokeStyle = '#666'; ctx.lineWidth = 1; ctx.strokeRect(c.x, yy, c.w, r.h); }
+        ctx.font = fontOf(c.st, c.size);
+        ctx.fillStyle = c.st.c || '#111';
+        ctx.textAlign = c.st.mid ? 'center' : 'left';
+        const top = c.st.mid ? yy + (r.h - c.lines.length * c.lh) / 2 : yy + PAD;
+        c.lines.forEach((line, j) => {
+          ctx.fillText(line, c.st.mid ? c.x + c.w / 2 : c.x + PAD, top + j * c.lh + (c.lh - c.size) / 2);
+        });
+      });
+      yy += r.h;
+    });
+    return { cv, w: PW, h: PH };
+  });
+}
+
+// Φύλλα → αρχείο PDF (μία εικόνα JPEG ανά σελίδα). Σύγχρονο, ώστε η κοινοποίηση στο κινητό να ανοίγει κανονικά.
+function pdfBlob(sheets) {
+  const pages = sheets.flatMap((s) => sheetPages(s));
+  const enc = new TextEncoder();
+  const chunks = [];
+  const offs = [];
+  let len = 0;
+  const push = (x) => { const b = typeof x === 'string' ? enc.encode(x) : x; chunks.push(b); len += b.length; };
+  const obj = (n, head, stream) => {
+    offs[n] = len;
+    push(`${n} 0 obj\n${head}\n`);
+    if (stream) { push('stream\n'); push(stream); push('\nendstream\n'); }
+    push('endobj\n');
+  };
+  push(new Uint8Array([0x25, 0x50, 0x44, 0x46, 0x2d, 0x31, 0x2e, 0x34, 0x0a, 0x25, 0xe2, 0xe3, 0xcf, 0xd3, 0x0a])); // %PDF-1.4
+  const n = pages.length;
+  obj(1, '<< /Type /Catalog /Pages 2 0 R >>');
+  obj(2, `<< /Type /Pages /Count ${n} /Kids [${pages.map((p, i) => `${3 + i * 3} 0 R`).join(' ')}] >>`);
+  pages.forEach((p, i) => {
+    const ctx = p.cv.getContext('2d');
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.font = `${8 * 2.5}px ${PDF_FONT}`;
+    ctx.fillStyle = '#777';
+    ctx.textAlign = 'right';
+    ctx.textBaseline = 'alphabetic';
+    ctx.fillText(`Σελίδα ${i + 1} από ${n}`, p.cv.width - 28 * 2.5, p.cv.height - 16 * 2.5);
+    const b64 = p.cv.toDataURL('image/jpeg', 0.85).split(',')[1];
+    const bin = atob(b64);
+    const jpg = new Uint8Array(bin.length);
+    for (let j = 0; j < bin.length; j++) jpg[j] = bin.charCodeAt(j);
+    const draw = enc.encode(`q ${p.w.toFixed(2)} 0 0 ${p.h.toFixed(2)} 0 0 cm /Im0 Do Q`);
+    const base = 3 + i * 3;
+    obj(base, `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${p.w.toFixed(2)} ${p.h.toFixed(2)}] /Resources << /XObject << /Im0 ${base + 2} 0 R >> >> /Contents ${base + 1} 0 R >>`);
+    obj(base + 1, `<< /Length ${draw.length} >>`, draw);
+    obj(base + 2, `<< /Type /XObject /Subtype /Image /Width ${p.cv.width} /Height ${p.cv.height} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${jpg.length} >>`, jpg);
+  });
+  const xref = len;
+  const size = 3 + n * 3;
+  let x = `xref\n0 ${size}\n0000000000 65535 f \n`;
+  for (let i = 1; i < size; i++) x += `${String(offs[i]).padStart(10, '0')} 00000 n \n`;
+  push(x + `trailer\n<< /Size ${size} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF\n`);
+  return new Blob(chunks, { type: 'application/pdf' });
 }
 
 // Στο κινητό ανοίγει την κοινοποίηση (και «Αποθήκευση σε Αρχεία»), αλλιώς κανονική λήψη.
@@ -938,6 +1114,18 @@ function adminStores() {
 }
 
 // Κωδικός υπευθύνου για το «Πρόγραμμα μήνα» καθαριοτήτων (φυλάσσεται στο Google Script).
+// Ορισμός κωδικού υπευθύνου και έλεγχος ότι το κοινό αρχείο τον δέχεται πλέον.
+async function setAndCheckStorePw(admin, store, newPw) {
+  await apiCall({ action: 'setStorePw', pw: admin, store, newPw });
+  try {
+    await apiCall({ action: 'checkPlanPw', store, pw: newPw });
+    return true;
+  } catch (e) {
+    if (String((e && e.message) || e) === 'password') return false;
+    throw e;
+  }
+}
+
 // Ίδιος κωδικός υπευθύνου για όλα τα καταστήματα (Πρόγραμμα μήνα), με τον κωδικό αρχείου.
 function allStorePwBox() {
   const admin = h('input', { type: 'password', autocomplete: 'current-password', placeholder: 'Ο δικός σου κωδικός αρχείου' });
@@ -953,7 +1141,7 @@ function allStorePwBox() {
     for (let i = 0; i < stores.length; i++) {
       out.textContent = `Περίμενε… ${i + 1}/${stores.length} (${stores[i].name})`;
       try {
-        await apiCall({ action: 'setStorePw', pw: admin.value, store: stores[i].id, newPw: pw.value.trim() });
+        if (!(await setAndCheckStorePw(admin.value, stores[i].id, pw.value.trim()))) failed.push(stores[i].name);
       } catch (e) {
         const m = String((e && e.message) || e);
         if (m === 'password' || m === 'locked' || m === 'unknown-action') {
@@ -966,7 +1154,7 @@ function allStorePwBox() {
     }
     btn.disabled = false;
     out.textContent = failed.length
-      ? `Ορίστηκε, εκτός από: ${failed.join(', ')}. Δοκίμασε ξανά.`
+      ? `Δεν επιβεβαιώθηκε σε: ${failed.join(', ')}. Δοκίμασε ξανά· αν επιμένει, ενημέρωσε το Google Script (νέα έκδοση).`
       : `✓ Ορίστηκε ο ίδιος κωδικός υπευθύνου σε όλα τα καταστήματα (${stores.length}).`;
     if (!failed.length) pw.value = '';
   };
@@ -990,9 +1178,15 @@ function storePwBox(store) {
     if (remove && !confirm(`Να αφαιρεθεί ο κωδικός υπευθύνου για «${store.name}»;`)) return;
     out.textContent = 'Περίμενε…';
     try {
-      await apiCall({ action: 'setStorePw', pw: admin.value, store: store.id, newPw: remove ? '' : pw.value.trim() });
-      out.textContent = remove ? '✓ Ο κωδικός αφαιρέθηκε.' : `✓ Ορίστηκε. Δώσε τον κωδικό στον/στην υπεύθυνο του καταστήματος «${store.name}».`;
-      pw.value = '';
+      if (remove) {
+        await apiCall({ action: 'setStorePw', pw: admin.value, store: store.id, newPw: '' });
+        out.textContent = '✓ Ο κωδικός αφαιρέθηκε.';
+      } else if (await setAndCheckStorePw(admin.value, store.id, pw.value.trim())) {
+        out.textContent = `✓ Ορίστηκε και ελέγχθηκε. Δώσε τον κωδικό στον/στην υπεύθυνο του καταστήματος «${store.name}».`;
+        pw.value = '';
+      } else {
+        out.textContent = 'Ο κωδικός δεν επιβεβαιώθηκε από το Google Script. Ενημέρωσέ το (νέα έκδοση) και δοκίμασε ξανά.';
+      }
     } catch (e) {
       const m = String((e && e.message) || e);
       out.textContent = m === 'password' ? 'Ο κωδικός αρχείου είναι λάθος.' : m === 'unknown-action' ? 'Το Google Script χρειάζεται ενημέρωση (οδηγίες στο README).' : apiMsg(e);
@@ -1501,7 +1695,7 @@ async function init() {
   window.addEventListener('beforeunload', (e) => {
     if (f.store.value && getDraft(f.store.value).length) { e.preventDefault(); e.returnValue = ''; }
   });
-  $('btn-excel').addEventListener('click', exportExcel);
+  $('btn-excel').addEventListener('click', exportChecklist);
   $('btn-print').addEventListener('click', () => {
     if (!SECTIONS[state.section]) { toast('Επίλεξε πρώτα «ΑΝΟΙΓΜΑ» ή «ΚΛΕΙΣΙΜΟ».'); return; }
     renderPrint();

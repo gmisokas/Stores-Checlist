@@ -411,13 +411,13 @@ function afterSync(sk, changed) {
   updateSaveStatus();
   if (typeof updateArchiveBtn === 'function') updateArchiveBtn();
   if (f.store.value !== sk) return;
+  updateTodoBadge();
+  if (!state.section) { if (typeof updateHome === 'function') updateHome(); return; }
   const view = $('log-view');
   const waiting = !!view.querySelector('.log-wait');
-  if (changed) updateTodoBadge();
-  if (state.section === 'todo') { if (waiting || changed) renderLog(); return; }
-  if (state.section !== 'log' || state.logMode !== 'main') return;
-  // Δεν χαλάμε τη φόρμα πρώτης δήλωσης εξοπλισμού όσο συμπληρώνεται.
-  if (!waiting && view.querySelector('.log-setup') && !getEquip(sk)) return;
+  // Στον υπεύθυνο (πρόγραμμα, εξοπλισμός) δεν αλλάζει τίποτα όσο συμπληρώνεται.
+  if (state.section === 'manager') { if (waiting) renderLog(); return; }
+  if (state.section !== 'log') return;
   if (waiting || changed) renderLog();
 }
 
@@ -779,64 +779,31 @@ function todoData(sk) {
   return out;
 }
 
-// Αριθμός στο κουμπί ΕΚΚΡΕΜΟΤΗΤΕΣ: ό,τι θέλει ενέργεια (καθυστερήσεις, σημερινές, τικ χωρίς αποθήκευση, ειδοποίηση).
+// Αριθμός και κείμενο στο πλακίδιο ΚΑΘΑΡΙΟΤΗΤΕΣ / ΑΠΟΨΥΞΕΙΣ: ό,τι θέλει ενέργεια (καθυστερήσεις, σημερινές, ειδοποίηση).
 function updateTodoBadge() {
   const el = $('todo-badge');
   if (!el) return;
-  const d = todoData(f.store.value);
-  const n = d.late.length + d.due.length + d.draft + (d.prev ? 1 : 0);
+  const sk = f.store.value;
+  const d = todoData(sk);
+  const n = d.late.length + d.due.length + (d.prev ? 1 : 0);
   el.textContent = n > 99 ? '99+' : String(n);
   el.hidden = !n;
+  const sub = $('sub-log');
+  if (sub) {
+    sub.textContent = logTileText(sk, d);
+    sub.className = 'tile-sub' + (d.late.length || d.prev ? ' late' : !n && getEquip(sk) ? ' ok' : '');
+  }
 }
 
-function todoView(sk) {
-  const d = todoData(sk);
-  const toLog = () => { state.section = 'log'; state.logMode = 'main'; renderChecklist(); scrollToLog(); };
-  const row = (t, sub) => h('li', { class: 'task st-' + t.st },
-    h('span', { class: 'task-text' }, t.u.label, h('small', {}, ' · ' + LOG_TYPES[t.type])),
-    sub ? h('span', { class: t.st === 'overdue' ? 'late-tag' : 'todo-tag' }, sub) : null);
-  const boxes = [];
-  if (!getEquip(sk)) {
-    boxes.push(h('div', { class: 'box' }, h('p', { class: 'hint' }, 'Δεν έχει δηλωθεί ακόμα εξοπλισμός για το κατάστημα. Ο/Η υπεύθυνος τον δηλώνει στις ΚΑΘΑΡΙΟΤΗΤΕΣ / ΑΠΟΨΥΞΕΙΣ.')));
-  }
-  if (d.draft) {
-    boxes.push(h('div', { class: 'box todo-box warn' },
-      h('h2', {}, `⚠️ Τικ που δεν αποθηκεύτηκαν (${d.draft})`),
-      h('p', { class: 'hint' }, 'Στις ΚΑΘΑΡΙΟΤΗΤΕΣ / ΑΠΟΨΥΞΕΙΣ πάτα «Αποθήκευση στο αρχείο».')));
-  }
-  if (d.late.length) {
-    boxes.push(h('div', { class: 'box todo-box late' },
-      h('h2', {}, `⏳ Σε καθυστέρηση (${d.late.length})`),
-      h('p', { class: 'hint' }, 'Να γίνουν το συντομότερο.'),
-      h('ul', { class: 'tasks' }, d.late.map((t) => row(t, `από ${PlanCalc.dayLabel(t.d)} · ${PlanCalc.gap(t.d, d.today)}`)))));
-  }
-  if (d.due.length) {
-    boxes.push(h('div', { class: 'box todo-box' },
-      h('h2', {}, `📋 Για σήμερα (${d.due.length})`),
-      h('ul', { class: 'tasks' }, d.due.map((t) => row(t, '')))));
-  }
-  if (d.prev) {
-    boxes.push(h('div', { class: 'box todo-box alert' },
-      h('h2', {}, `🔔 Ειδοποίηση – ${monthLabel(d.prev.ym)}`),
-      h('p', {}, 'Δεν έγιναν όπως ορίζει το πρόγραμμα:'),
-      taskList(d.prev.issues, ''),
-      h('div', { class: 'stack' },
-        h('button', { type: 'button', class: 'btn viber', onclick: () => shareText(noticeText(storeLabel(), d.prev.ym, d.prev.issues, '')) }, 'Αποστολή στο Viber'),
-        h('button', { type: 'button', class: 'btn ghost', onclick: () => { lsSet(d.prev.key, true); renderChecklist(); } }, 'Το είδα'))));
-  }
-  if (d.left.length) {
-    boxes.push(h('div', { class: 'box todo-box' },
-      h('h2', {}, `⏰ Μέχρι το τέλος του μήνα (${d.left.length})`),
-      h('ul', { class: 'tasks' }, d.left.map((t) => row(t, PlanCalc.dayLabel(t.d))))));
-  }
-  if (getEquip(sk) && !boxes.length) {
-    boxes.push(h('div', { class: 'box todo-ok' }, h('p', {}, '✅ Δεν υπάρχουν εκκρεμότητες.')));
-  }
-  return h('div', { class: 'log todo' },
-    shared() ? h('p', { class: 'log-sync' }, syncStatusContent(sk)) : null,
-    ...boxes,
-    h('section', { class: 'actions' },
-      h('button', { type: 'button', class: 'btn primary', onclick: toLog }, 'Καταχώρηση: ΚΑΘΑΡΙΟΤΗΤΕΣ / ΑΠΟΨΥΞΕΙΣ')));
+function logTileText(sk, d) {
+  if (!sk) return '';
+  if (shared() && !isSynced(sk)) return '⏳ Φόρτωση…';
+  if (!getEquip(sk)) return 'Ο/Η υπεύθυνος δηλώνει πρώτα τον εξοπλισμό';
+  const parts = [];
+  if (d.late.length) parts.push(`⏳ ${d.late.length} σε καθυστέρηση`);
+  if (d.due.length) parts.push(`📋 ${d.due.length} για σήμερα`);
+  if (d.prev) parts.push('🔔 ειδοποίηση μήνα');
+  return parts.length ? parts.join(' · ') : '✅ Τίποτα για σήμερα';
 }
 
 /* ---------- Οθόνη αρχείου ---------- */
@@ -844,27 +811,16 @@ function todoView(sk) {
 function renderLog() {
   const view = $('log-view');
   const sk = f.store.value;
-  if (!sk) {
-    view.replaceChildren(h('p', { class: 'pick-hint' }, 'Επίλεξε πρώτα κατάστημα.'));
-    return;
-  }
+  if (!sk) { view.replaceChildren(); return; }
   const date = f.date.value || todayISO();
   if (state.logDateSeen !== date) {
     state.logDateSeen = date;
     state.logCalMonth = null;
     state.logCalDay = null;
   }
-  if (state.section === 'todo') {
-    if (shared()) {
-      if (!sync.busy[sk] && Date.now() - (sync.tried[sk] || 0) > 60000) syncStore(sk);
-      if (!isSynced(sk)) { view.replaceChildren(waitBox(sk)); return; }
-    }
-    view.replaceChildren(todoView(sk));
-    return;
-  }
-  if (state.logMode === 'unlock') { view.replaceChildren(unlockForm()); return; }
-  if (state.logMode === 'archive') {
-    view.replaceChildren(shared() && state.archive ? archiveShared() : archiveView(sk, deviceSrc(sk)));
+  if (state.section === 'manager') {
+    view.replaceChildren(managerView(sk));
+    updateSecBar();
     return;
   }
   if (shared()) {
@@ -872,11 +828,22 @@ function renderLog() {
     if (!sync.busy[sk] && Date.now() - (sync.tried[sk] || 0) > 60000) syncStore(sk);
     if (!isSynced(sk)) { view.replaceChildren(waitBox(sk)); return; }
   }
+  // Τικ από την παλιά έκδοση («Προς αποθήκευση»): αποθηκεύονται τώρα.
+  if (getDraft(sk).length && (f.name.value.trim() || isDemo())) {
+    commitDraft(sk);
+    if (shared()) syncStore(sk);
+  }
   const setup = getEquip(sk);
-  if (setup && state.logMode === 'planUnlock') { view.replaceChildren(planUnlockForm(sk)); return; }
-  if (setup && state.logMode === 'plan' && state.planEdit && state.planEdit.sk === sk) { view.replaceChildren(planEditor(sk, setup)); return; }
-  view.replaceChildren(!setup || state.logMode === 'setup' ? setupForm(sk, setup) : logMain(sk, setup));
+  view.replaceChildren(setup ? logMain(sk, setup) : noEquipBox());
   updateSaveStatus();
+}
+
+// Χωρίς δηλωμένο εξοπλισμό: τον δηλώνει ο/η υπεύθυνος.
+function noEquipBox() {
+  return h('div', { class: 'log' }, h('div', { class: 'log-warn' },
+    h('div', { class: 'log-warn-title' }, '⚠️ Δεν έχει δηλωθεί εξοπλισμός'),
+    h('p', {}, 'Ο/Η υπεύθυνος καταστήματος δηλώνει πρώτα τον εξοπλισμό (καταψύξεις, βιτρίνες, μηχανήματα, χώροι). Μετά εμφανίζονται εδώ οι εργασίες κάθε ημέρας.'),
+    h('button', { type: 'button', class: 'btn dark', onclick: () => goManager('setup') }, '⚙️ Υπεύθυνος καταστήματος → Εξοπλισμός')));
 }
 
 // Πρώτη φορά σε αυτή τη συσκευή: περιμένουμε το κοινό αρχείο πριν δείξουμε οτιδήποτε.
@@ -889,17 +856,123 @@ function waitBox(sk) {
       : h('p', {}, '⏳ Φόρτωση κοινού αρχείου…')));
 }
 
+// ΚΑΘΑΡΙΟΤΗΤΕΣ / ΑΠΟΨΥΞΕΙΣ: οι εργασίες της ημέρας (σε καθυστέρηση και για σήμερα) με ✓ δίπλα.
+// Κάθε ✓ αποθηκεύεται αμέσως. Για ό,τι δεν είναι στη λίστα: «+ Άλλη εργασία».
 function logMain(sk, setup) {
-  const type = state.logType;
   const date = f.date.value || todayISO();
-  const ym = ymOf(date);
   const today = todayISO();
-  const all = getLog(sk);
+  const isToday = date === today;
+  const word = isToday ? 'σήμερα' : date === addDays(today, -1) ? 'χθες' : fmtDate(date);
+  const tasks = taskStates(deviceSrc(sk), ymOf(date), '', date);
+  const late = tasks.filter((t) => t.st === 'overdue');
+  const due = tasks.filter((t) => t.st === 'due');
+  const done = getLog(sk).filter((e) => e.d === date).sort((x, y) => String(x.at).localeCompare(String(y.at)));
+  const d = todoData(sk);
+  const boxes = [];
 
+  // Ειδοποίηση για τον προηγούμενο μήνα, μέχρι να πατηθεί «Το είδα».
+  if (isToday && d.prev) {
+    boxes.push(h('div', { class: 'box todo-box alert' },
+      h('h2', {}, `🔔 Ειδοποίηση – ${monthLabel(d.prev.ym)}`),
+      h('p', {}, 'Δεν έγιναν όπως ορίζει το πρόγραμμα:'),
+      taskList(d.prev.issues, ''),
+      h('div', { class: 'stack' },
+        h('button', { type: 'button', class: 'btn viber', onclick: () => shareText(noticeText(storeLabel(), d.prev.ym, d.prev.issues, '')) }, 'Αποστολή στο Viber'),
+        h('button', { type: 'button', class: 'btn ghost', onclick: () => { lsSet(d.prev.key, true); renderLog(); updateTodoBadge(); } }, 'Το είδα'))));
+  }
+  if (late.length) {
+    boxes.push(h('div', { class: 'box todo-box late' },
+      h('h2', {}, `⏳ Σε καθυστέρηση (${late.length})`),
+      h('p', { class: 'hint' }, 'Η ημέρα τους πέρασε. Να γίνουν το συντομότερο.'),
+      h('ul', { class: 'tasks' }, late.map((t) => taskRow(sk, t, `από ${PlanCalc.dayLabel(t.d)} · ${PlanCalc.gap(t.d, date)}`)))));
+  }
+  if (due.length) {
+    boxes.push(h('div', { class: 'box todo-box' },
+      h('h2', {}, `📋 ${isToday ? 'Σήμερα' : 'Για ' + word} (${due.length})`),
+      h('ul', { class: 'tasks' }, due.map((t) => taskRow(sk, t, '')))));
+  }
+  if (!late.length && !due.length) {
+    boxes.push(h('div', { class: 'box todo-ok' }, h('p', {}, `✅ Δεν υπάρχει εργασία του προγράμματος για ${word}.`)));
+  }
+  boxes.push(h('div', { class: 'box' },
+    h('h2', {}, `✅ Έγιναν ${word} (${done.length})`),
+    done.length
+      ? h('ul', { class: 'entries' }, done.map((e) => entryRow(sk, e, e.at && bizISO(new Date(e.at)) === today, false, true)))
+      : h('p', { class: 'hint' }, 'Καμία καταχώρηση ακόμα. Πάτα ✓ μόλις γίνει μια εργασία.')));
+  // Από τις 25 του μήνα: ό,τι μένει από το πρόγραμμα μέχρι το τέλος του μήνα.
+  if (isToday && d.left.length) {
+    boxes.push(h('div', { class: 'box todo-box' },
+      h('h2', {}, `⏰ Μέχρι το τέλος του μήνα (${d.left.length})`),
+      h('ul', { class: 'tasks' }, d.left.map((t) => h('li', { class: 'task st-todo' },
+        h('span', { class: 'task-text' }, t.u.label, h('small', {}, ' · ' + LOG_TYPES[t.type])),
+        h('span', { class: 'todo-tag' }, PlanCalc.dayLabel(t.d)))))));
+  }
+
+  return h('div', { class: 'log' },
+    shared() ? h('p', { class: 'log-sync' }, syncStatusContent(sk)) : null,
+    h('p', { class: 'save-status log-save-status', hidden: true }),
+    ...boxes,
+    otherTask(sk, setup),
+    calendarEl(sk, setup, state.logType),
+    h('section', { class: 'actions' },
+      h('button', { type: 'button', class: 'btn viber', onclick: () => logViber(sk) }, 'Αποστολή στο Viber')));
+}
+
+function taskKey(t) { return `${t.type}:${t.u.key}:${t.d}`; }
+
+// Μία εργασία του προγράμματος: ✓ = έγινε · ⋯ = δεν έγινε, με αιτία.
+function taskRow(sk, t, sub) {
+  const open = !!(state.logSkip && state.logSkip.sk === sk && state.logSkip.key === taskKey(t));
+  return h('li', { class: 'task act st-' + t.st },
+    h('span', { class: 'task-text' }, t.u.label, h('small', {}, ' · ' + LOG_TYPES[t.type]),
+      sub ? h('span', { class: 'task-sub' }, sub) : null),
+    h('button', {
+      type: 'button',
+      class: 'mark ok task-tick',
+      'aria-label': `Έγινε: ${t.u.label} – ${LOG_TYPES[t.type]}`,
+      onclick: () => addEntry(sk, t.type, t.u.eq, t.u.no),
+    }, '✓'),
+    h('button', {
+      type: 'button',
+      class: 'task-more',
+      'aria-label': 'Δεν έγινε; Δήλωσε αιτία',
+      'aria-expanded': String(open),
+      onclick: () => { state.logSkip = open ? null : { sk, key: taskKey(t), why: '', note: '' }; renderLog(); },
+    }, '⋯'),
+    open ? skipBox(sk, t) : null);
+}
+
+// «Δεν έγινε» με αιτία, για εργασία που δεν μπορεί να γίνει (βλάβη, κλειστό κατάστημα…).
+function skipBox(sk, t) {
+  const skip = state.logSkip;
+  const note = h('input', {
+    type: 'text',
+    maxlength: 120,
+    value: skip.note,
+    placeholder: skip.why === 'o' ? 'Γράψε την αιτία' : 'Σημείωση (προαιρετικά)',
+    'aria-label': 'Σημείωση',
+    oninput: (e) => { skip.note = e.target.value; },
+  });
+  const send = () => {
+    if (!skip.why) { toast('Διάλεξε αιτία.'); return; }
+    if (skip.why === 'o' && !skip.note.trim()) { toast('Γράψε την αιτία.'); note.focus(); return; }
+    addEntry(sk, t.type, t.u.eq, t.u.no, { skip: skip.why, note: skip.note.trim() });
+  };
+  return h('div', { class: 'skip-box' },
+    h('div', { class: 'skip-title' }, 'Δεν έγινε – αιτία'),
+    h('div', { class: 'seg skip-why' }, Object.entries(PlanCalc.WHY).map(([k, label]) =>
+      h('button', { type: 'button', 'aria-pressed': String(skip.why === k), onclick: () => { skip.why = k; renderLog(); } }, label))),
+    note,
+    h('div', { class: 'stack' },
+      h('button', { type: 'button', class: 'btn dark', onclick: send }, 'Καταχώρηση «Δεν έγινε»'),
+      h('button', { type: 'button', class: 'btn ghost', onclick: () => { state.logSkip = null; renderLog(); } }, 'Άκυρο')));
+}
+
+// «+ Άλλη εργασία»: για ό,τι δεν είναι στη λίστα (π.χ. έγινε νωρίτερα ή επιπλέον).
+function otherTask(sk, setup) {
+  const type = state.logType;
   const typeSeg = h('div', { class: 'seg log-type' }, Object.entries(LOG_TYPES).map(([k, label]) =>
     h('button', { type: 'button', 'aria-pressed': String(k === type), onclick: () => { state.logType = k; renderLog(); } }, label)));
-
-  // Καταχώρηση: εξοπλισμός/χώρος, Νο, τικ.
   const eqs = state.data.cleaning.equipment.filter((eq) => eq[type] && countOf(setup.counts, eq) > 0);
   // Η επιλογή κρατιέται αν η οθόνη ξαναχτιστεί (π.χ. μετά από συγχρονισμό).
   const sel = state.logSel && state.logSel.type === type && state.logSel.sk === sk ? state.logSel : { sk, type, eq: '', no: '' };
@@ -924,100 +997,25 @@ function logMain(sk, setup) {
     }
   };
   fillNo();
-  const pick = () => {
-    const eq = eqs.find((x) => x.id === selEq.value);
-    if (!eq) { toast('Επίλεξε εξοπλισμό ή χώρο.'); selEq.focus(); return null; }
-    const no = eq.numbered ? parseInt(selNo.value, 10) || 0 : 0;
-    if (eq.numbered && !no) { toast('Επίλεξε Νο.'); selNo.focus(); return null; }
-    return { eq, no };
-  };
   const tick = () => {
-    const p = pick();
-    if (p) addDraft(sk, type, p.eq, p.no);
+    const eq = eqs.find((x) => x.id === selEq.value);
+    if (!eq) { toast('Επίλεξε εξοπλισμό ή χώρο.'); selEq.focus(); return; }
+    const no = eq.numbered ? parseInt(selNo.value, 10) || 0 : 0;
+    if (eq.numbered && !no) { toast('Επίλεξε Νο.'); selNo.focus(); return; }
+    addEntry(sk, type, eq, no);
   };
-
-  // «Δεν έγινε» με αιτία: για εργασία του προγράμματος που δεν μπορεί να γίνει (βλάβη, κλειστό κατάστημα…).
-  const skip = state.logSkip && state.logSkip.sk === sk && state.logSkip.type === type ? state.logSkip : null;
-  let skipEl;
-  if (skip) {
-    const note = h('input', {
-      type: 'text',
-      maxlength: 120,
-      value: skip.note,
-      placeholder: skip.why === 'o' ? 'Γράψε την αιτία' : 'Σημείωση (προαιρετικά)',
-      'aria-label': 'Σημείωση',
-      oninput: (e) => { skip.note = e.target.value; },
-    });
-    const send = () => {
-      const p = pick();
-      if (!p) return;
-      if (!skip.why) { toast('Διάλεξε αιτία.'); return; }
-      if (skip.why === 'o' && !skip.note.trim()) { toast('Γράψε την αιτία.'); note.focus(); return; }
-      addDraft(sk, type, p.eq, p.no, { skip: skip.why, note: skip.note.trim() });
-    };
-    skipEl = h('div', { class: 'skip-box' },
-      h('div', { class: 'skip-title' }, 'Δεν έγινε – αιτία'),
-      h('p', { class: 'hint' }, 'Για εργασία του προγράμματος που δεν μπορεί να γίνει. Διάλεξε πάνω εξοπλισμό / χώρο και Νο.'),
-      h('div', { class: 'seg skip-why' }, Object.entries(PlanCalc.WHY).map(([k, label]) =>
-        h('button', { type: 'button', 'aria-pressed': String(skip.why === k), onclick: () => { skip.why = k; renderLog(); } }, label))),
-      note,
-      h('div', { class: 'stack' },
-        h('button', { type: 'button', class: 'btn dark', onclick: send }, 'Καταχώρηση «Δεν έγινε»'),
-        h('button', { type: 'button', class: 'btn ghost', onclick: () => { state.logSkip = null; renderLog(); } }, 'Άκυρο')));
-  } else {
-    skipEl = h('button', {
-      type: 'button',
-      class: 'linkbtn skip-link',
-      onclick: () => { state.logSkip = { sk, type, why: '', note: '' }; renderLog(); },
-    }, 'Δεν έγινε; Δήλωσε αιτία');
-  }
-
-  const draft = getDraft(sk);
-  const entryCard = h('div', { class: 'box log-entry' },
-    h('h2', {}, 'Καταχώρηση – ' + LOG_TYPES[type]),
+  const det = h('details', { class: 'box other-task', open: !!state.logOther },
+    h('summary', {}, '+ Άλλη εργασία'),
+    h('p', { class: 'hint' }, 'Για εργασία που δεν είναι στη λίστα, π.χ. έγινε νωρίτερα ή επιπλέον.'),
+    typeSeg,
     h('div', { class: 'log-grid' },
       h('span', { class: 'log-col' }, 'Εξοπλισμός / χώρος'),
       h('span', { class: 'log-col' }, 'Νο'),
-      h('span', { class: 'log-col log-col-tick' }, 'Αν έγινε, πατήστε'),
+      h('span', { class: 'log-col log-col-tick' }, 'Έγινε'),
       selEq, selNo,
-      h('button', { type: 'button', class: 'mark ok log-tick', 'aria-label': 'Έγινε', onclick: tick }, '✓')),
-    h('p', { class: 'hint' }, `Ημερομηνία: ${fmtDate(date)} · Υπεύθυνος: `, whoEl()),
-    skipEl);
-
-  // Στο τέλος της σελίδας: τα τικ που περιμένουν και η αποθήκευση στο αρχείο.
-  const saveCard = h('div', { class: 'box log-save' },
-    h('h2', {}, `Προς αποθήκευση (${draft.length})`),
-    draft.length
-      ? h('ul', { class: 'entries draft' }, draft.map((x, i) => h('li', { class: x.skip ? 'skip' : '' },
-        h('span', {}, entryLabel(x), h('small', {}, ` · ${LOG_TYPES[x.t]}${x.skip ? ' · Δεν έγινε – ' + (PlanCalc.WHY[x.skip] || '') : ''}${x.d !== date ? ' · ' + fmtDate(x.d) : ''}`)),
-        h('button', { type: 'button', class: 'del', 'aria-label': 'Αφαίρεση', onclick: () => removeDraft(sk, i) }, '✕'))))
-      : h('p', { class: 'hint' }, 'Πάτα ✓ σε ό,τι έγινε. Στο τέλος πάτα «Αποθήκευση στο αρχείο».'),
-    h('button', { type: 'button', class: 'btn dark save-log', disabled: !!state.logSaving, onclick: () => saveDraft(sk) }, 'Αποθήκευση στο αρχείο'),
-    h('p', { class: 'save-status log-save-status', hidden: true }));
-
-  const isToday = date === today;
-
-  // Καταχωρήσεις της ημέρας. Διαγραφή μόνο αυθημερόν (για λάθη).
-  const dayEntries = all.filter((e) => e.d === date && e.t === type).sort((x, y) => String(x.at).localeCompare(String(y.at)));
-  const entriesCard = h('div', { class: 'box' },
-    h('h2', {}, `Καταχωρήσεις ${isToday ? 'σήμερα' : fmtDate(date)}`),
-    dayEntries.length
-      ? h('ul', { class: 'entries' }, dayEntries.map((e) => entryRow(sk, e, e.at && bizISO(new Date(e.at)) === today)))
-      : h('p', { class: 'hint' }, 'Καμία καταχώρηση ακόμα.'));
-
-  return h('div', { class: 'log' },
-    shared() ? h('p', { class: 'log-sync' }, syncStatusContent(sk)) : null,
-    typeSeg,
-    entryCard,
-    entriesCard,
-    calendarEl(sk, setup, type),
-    saveCard,
-    h('section', { class: 'actions' },
-      h('button', { type: 'button', class: 'btn primary', onclick: () => logViber(sk) }, 'Αποστολή στο Viber'),
-      h('button', { type: 'button', class: 'btn', onclick: () => openLogExport(sk, ym, deviceSrc(sk), shared() ? 2 : 13) }, 'Αποθήκευση σε Excel / PDF'),
-      h('button', { type: 'button', class: 'btn', onclick: () => { state.logMode = 'setup'; renderLog(); scrollToLog(); } }, 'Εξοπλισμός καταστήματος'),
-      shared() || isDemo() ? h('button', { type: 'button', class: 'btn', onclick: () => openPlanner(sk) }, '📅 Πρόγραμμα μήνα (υπεύθυνος)') : null,
-      h('button', { type: 'button', class: 'btn ghost', onclick: () => openArchive() }, '🔒 Αρχείο (με κωδικό)')));
+      h('button', { type: 'button', class: 'mark ok log-tick', 'aria-label': 'Έγινε', onclick: tick }, '✓')));
+  det.addEventListener('toggle', () => { state.logOther = det.open; });
+  return det;
 }
 
 // Όνομα υπευθύνου που ενημερώνεται καθώς γράφεται (χωρίς να ξαναχτίζεται η οθόνη).
@@ -1025,10 +1023,8 @@ function whoEl() { return h('span', { class: 'log-who' }, whoText()); }
 function whoText() { return f.name.value.trim() || '— (συμπλήρωσε το όνομα πάνω)'; }
 function updateWho() { document.querySelectorAll('.log-who').forEach((el) => { el.textContent = whoText(); }); }
 
-function scrollToLog() {
-  const el = $('log-view');
-  if (el && el.scrollIntoView) el.scrollIntoView({ block: 'start' });
-}
+// Νέα οθόνη μέσα στην ενότητα: από την αρχή της σελίδας.
+function scrollToLog() { window.scrollTo(0, 0); }
 
 function eqById(id) { return state.data.cleaning.equipment.find((x) => x.id === id) || null; }
 
@@ -1037,7 +1033,7 @@ function entryLabel(e) {
   return eq ? unitLabel(eq, e.no || 0) : '(διαγραμμένος εξοπλισμός)';
 }
 
-function entryRow(sk, e, canDelete, showDate) {
+function entryRow(sk, e, canDelete, showDate, showType) {
   const at = e.at ? new Date(e.at) : null;
   const time = at ? at.toTimeString().slice(0, 5) : '';
   // Καταχώρηση που έγινε άλλη ημέρα (π.χ. σήμερα για χθες): φαίνεται πότε καταχωρήθηκε.
@@ -1047,6 +1043,7 @@ function entryRow(sk, e, canDelete, showDate) {
       showDate ? h('b', {}, fmtDate(e.d) + ' ') : null,
       showDate ? h('small', {}, LOG_TYPES[e.t] + ' · ') : null,
       entryLabel(e),
+      showType ? h('small', {}, ' · ' + LOG_TYPES[e.t]) : null,
       e.skip ? h('b', { class: 'skip-txt' }, ` – Δεν έγινε: ${PlanCalc.WHY[e.skip] || ''}${e.note ? ' (' + e.note + ')' : ''}`) : null,
       h('small', {}, ` · ${e.by || '—'}${later ? ' · ' + later : time ? ' · ' + time : ''}`)),
     canDelete ? h('button', {
@@ -1086,40 +1083,44 @@ async function deleteEntry(sk, e) {
   updateTodoBadge();
 }
 
-/* ---- Τικ «Προς αποθήκευση» και «Αποθήκευση στο αρχείο» ---- */
+/* ---- Καταχώρηση: κάθε ✓ αποθηκεύεται αμέσως ---- */
 
-// Τα τικ μένουν στη συσκευή μέχρι να πατηθεί «Αποθήκευση στο αρχείο» (δεν χάνονται αν κλείσει η σελίδα).
+// Τικ της παλιάς έκδοσης («Προς αποθήκευση»), που αποθηκεύονται με το πρώτο άνοιγμα.
 function getDraft(sk) { return lsGet(LOG_LS.draft + sk, []); }
 function setDraft(sk, list) { if (list.length) lsSet(LOG_LS.draft + sk, list); else lsDel(LOG_LS.draft + sk); }
 function sameUnit(a, t, eq, no, d) { return a.t === t && a.eq === eq && (a.no || 0) === no && a.d === d; }
-function inDraft(sk, t, eq, no, d) { return getDraft(sk).some((x) => sameUnit(x, t, eq, no, d)); }
 
-// extra: { skip, note } για «Δεν έγινε» με αιτία.
-function addDraft(sk, type, eq, no, extra) {
+// ✓ ή «Δεν έγινε» (extra: { skip, note }). Αποθηκεύεται αμέσως· στο κοινό αρχείο μόλις υπάρξει σύνδεση.
+function addEntry(sk, type, eq, no, extra) {
   const date = f.date.value;
   const today = todayISO();
-  if (!date) { toast('Συμπλήρωσε την ημερομηνία.'); f.date.focus(); return; }
+  if (!date) { toast('Συμπλήρωσε την ημερομηνία.'); askWho(f.date); return; }
   if (date > today) { toast('Δεν γίνεται καταχώρηση για μελλοντική ημερομηνία.'); return; }
-  if (date < addDays(today, -1)) { toast('Η καταχώρηση γίνεται μόνο για σήμερα ή για χθες. Άλλαξε την ημερομηνία πάνω.', 5000); return; }
-  if (getLog(sk).some((e) => sameUnit(e, type, eq.id, no, date))) { toast('Έχει ήδη αποθηκευτεί για αυτή την ημέρα.'); return; }
-  if (inDraft(sk, type, eq.id, no, date)) { toast('Είναι ήδη στη λίστα «Προς αποθήκευση».'); return; }
+  if (date < addDays(today, -1)) { toast('Η καταχώρηση γίνεται μόνο για σήμερα ή για χθες. Άλλαξε την ημερομηνία με το ✎.', 5000); return; }
+  const name = f.name.value.trim();
+  if (!name && !isDemo()) { toast('Συμπλήρωσε πρώτα το όνομά σου.'); askWho(); return; }
+  if (getLog(sk).some((e) => sameUnit(e, type, eq.id, no, date))) { toast('Έχει ήδη καταχωρηθεί για αυτή την ημέρα.'); return; }
   const item = Object.assign({ t: type, eq: eq.id, no, d: date }, extra && extra.skip ? { skip: extra.skip, note: extra.note || '' } : {});
   if (item.skip && !skipFits(sk, item)) {
     toast('Δεν υπάρχει εργασία του προγράμματος για αυτόν τον εξοπλισμό σήμερα ή σε καθυστέρηση. Δεν χρειάζεται δήλωση.', 6000);
     return;
   }
-  setDraft(sk, [...getDraft(sk), item]);
+  const entry = Object.assign({ id: newId('e') }, item, { by: name, at: new Date().toISOString() });
+  setLog(sk, [...getLog(sk), entry]);
+  if (shared()) { queueAdd(addOp(sk, entry)); syncStore(sk); }
+  lsSet(LOG_LS.saved + sk, entry.at);
   state.logSel = null;
-  if (item.skip) state.logSkip = null;
+  state.logSkip = null;
   renderLog();
   updateTodoBadge();
+  toast(item.skip ? `⊘ ${unitLabel(eq, no)}: καταχωρήθηκε «Δεν έγινε».` : `✓ ${unitLabel(eq, no)} – ${LOG_TYPES[type]}: καταχωρήθηκε.`);
 }
 
 // Το «Δεν έγινε» δηλώνεται μόνο για εργασία του προγράμματος (σημερινή, σε καθυστέρηση ή της ίδιας εβδομάδας).
 function skipFits(sk, item) {
   const src = deviceSrc(sk);
   const ym = ymOf(item.d);
-  const test = Object.assign({}, src, { entries: [...src.entries, ...getDraft(sk), Object.assign({ at: '~' }, item)] });
+  const test = Object.assign({}, src, { entries: [...src.entries, Object.assign({ at: '~' }, item)] });
   return taskStates(test, ym, item.t, asOfFor(ym))
     .some((t) => t.st === 'skip' && t.on === item.d && t.u.eq.id === item.eq && t.u.no === item.no);
 }
@@ -1129,29 +1130,7 @@ function addDays(iso, n) {
   return localISO(new Date(y, m - 1, d + n));
 }
 
-function removeDraft(sk, i) {
-  const list = getDraft(sk);
-  list.splice(i, 1);
-  setDraft(sk, list);
-  renderLog();
-  updateTodoBadge();
-}
-
-async function saveDraft(sk) {
-  if (!getDraft(sk).length) { toast('Πάτα πρώτα ✓ σε ό,τι έγινε.'); return; }
-  if (!f.name.value.trim()) { toast('Συμπλήρωσε πρώτα το όνομα του υπευθύνου (πάνω).'); f.name.focus(); return; }
-  commitDraft(sk);
-  if (shared()) {
-    state.logSaving = true;
-    renderLog();
-    await syncStore(sk);
-    state.logSaving = false;
-  }
-  renderLog();
-  updateTodoBadge();
-}
-
-// Τα τικ γίνονται καταχωρήσεις (και μπαίνουν στην ουρά για το κοινό αρχείο). Χωρίς αναμονή δικτύου.
+// Τα παλιά τικ γίνονται καταχωρήσεις (και μπαίνουν στην ουρά για το κοινό αρχείο). Χωρίς αναμονή δικτύου.
 function commitDraft(sk) {
   const draft = getDraft(sk);
   const name = f.name.value.trim();
@@ -1169,15 +1148,9 @@ function commitDraft(sk) {
   lsSet(LOG_LS.saved + sk, at);
 }
 
-// Viber: πρώτα αποθηκεύονται τα τικ που περιμένουν, μετά ανοίγει η κοινοποίηση με ό,τι έγινε και ό,τι εκκρεμεί σήμερα.
+// Viber: ό,τι έγινε και ό,τι εκκρεμεί την ημέρα.
 async function logViber(sk) {
-  if (!f.name.value.trim()) { toast('Συμπλήρωσε πρώτα το όνομα του υπευθύνου (πάνω).'); f.name.focus(); return; }
-  if (getDraft(sk).length) {
-    commitDraft(sk);
-    if (shared()) syncStore(sk);
-    renderLog();
-    updateTodoBadge();
-  }
+  if (!f.name.value.trim() && !isDemo()) { toast('Συμπλήρωσε πρώτα το όνομά σου.'); askWho(); return; }
   // Χωρίς αναμονή: το κινητό ανοίγει την κοινοποίηση μόνο αμέσως μετά το πάτημα.
   await shareText(logSummaryText(sk));
 }
@@ -1221,19 +1194,10 @@ function logSummaryText(sk) {
   return lines.join('\n');
 }
 
-// Ένδειξη κάτω από το «Αποθήκευση στο αρχείο».
+// Προειδοποίηση πάνω στις ΚΑΘΑΡΙΟΤΗΤΕΣ / ΑΠΟΨΥΞΕΙΣ (η αναμονή αποστολής φαίνεται στη γραμμή του κοινού αρχείου).
 function saveStatus(sk) {
   if (shared() && sync.version !== null && sync.version < SKIP_VERSION && pendingOf(sk).some((o) => o.op === 'add' && o.e && o.e.skip)) {
     return ['warn', '⚠️ Το «Δεν έγινε» δεν στάλθηκε: χρειάζεται ενημέρωση του Google Script (οδηγίες στο README).'];
-  }
-  const pendAdd = shared() && pendingOf(sk).some((o) => o.op === 'add');
-  if (state.logSaving || (pendAdd && sync.busy[sk])) return ['wait', '⏳ Αποστολή…'];
-  if (pendAdd) return ['wait', '⏳ Δεν έγινε ακόμα αποστολή – θα σταλεί μόλις υπάρξει σύνδεση.'];
-  const n = getDraft(sk).length;
-  if (n) return ['warn', `⚠️ ${n === 1 ? '1 τικ δεν έχει' : n + ' τικ δεν έχουν'} αποθηκευτεί ακόμα.`];
-  const at = lsGet(LOG_LS.saved + sk, '');
-  if (at && bizISO(new Date(at)) === todayISO()) {
-    return ['ok', `✓ ${shared() ? 'Έγινε αποστολή' : 'Αποθηκεύτηκε'} – ${new Date(at).toTimeString().slice(0, 5)}`];
   }
   return null;
 }
@@ -1246,20 +1210,13 @@ function updateSaveStatus() {
   });
 }
 
-// Προειδοποίηση πριν φύγει κάποιος από την οθόνη με τικ που δεν αποθηκεύτηκαν.
-function draftLeaveOk(sk) {
-  const n = sk ? getDraft(sk).length : 0;
-  if (!n) return true;
-  return confirm(`Έχεις ${n} τικ καθαριοτήτων/αποψύξεων που δεν αποθηκεύτηκαν στο αρχείο.\n\nΠάτα «Άκυρο» για να γυρίσεις και να πατήσεις «Αποθήκευση στο αρχείο».\nΑν συνεχίσεις, τα τικ μένουν στη λίστα για αργότερα.`);
-}
-
 /* ---- Πρόγραμμα μήνα: ο/η υπεύθυνος ορίζει ημέρες ανά εξοπλισμό ---- */
 
 function openPlanner(sk) {
   if (!shared() && !isDemo()) { toast('Το πρόγραμμα μήνα χρειάζεται σύνδεση με το κοινό αρχείο (Διαχείριση → Καθαριότητες).', 6000); return; }
-  // Στο DEMO χωρίς κωδικό.
-  state.logMode = isDemo() || (state.planPw && state.planPwStore === sk) ? 'plan' : 'planUnlock';
-  if (state.logMode === 'plan') state.planEdit = initPlanEdit(sk, plannerMonth());
+  if (!getEquip(sk)) { toast('Δήλωσε πρώτα τον εξοπλισμό του καταστήματος.'); return; }
+  state.logMode = 'plan';
+  state.planEdit = initPlanEdit(sk, plannerMonth());
   renderLog();
   scrollToLog();
 }
@@ -1271,7 +1228,43 @@ function plannerMonth() {
   return sel < now ? now : sel;
 }
 
-function planUnlockForm(sk) {
+/* ---- Υπεύθυνος καταστήματος: κωδικός και εργαλεία ---- */
+
+// Οθόνες μέσα στον υπεύθυνο (το «‹» γυρίζει στο μενού του).
+function managerSub() { return ['plan', 'setup', 'unlock', 'archive'].includes(state.logMode); }
+// Ο κωδικός υπευθύνου ελέγχεται από το κοινό αρχείο· στο DEMO και χωρίς κοινό αρχείο δεν ζητείται.
+function managerOpen(sk) { return !syncOn() || isDemo() || (!!state.planPw && state.planPwStore === sk); }
+function managerTitle() {
+  return { plan: '📅 ΠΡΟΓΡΑΜΜΑ ΜΗΝΑ', setup: '🧊 ΕΞΟΠΛΙΣΜΟΣ', unlock: '🔒 ΑΡΧΕΙΟ', archive: '🔒 ΑΡΧΕΙΟ' }[state.logMode] || '⚙️ ΥΠΕΥΘΥΝΟΣ';
+}
+
+// Από άλλη ενότητα στον υπεύθυνο, π.χ. κατευθείαν στον εξοπλισμό (μετά τον κωδικό).
+function goManager(next) {
+  state.section = 'manager';
+  state.mgrNext = next || null;
+  state.logMode = next && managerOpen(f.store.value) ? next : 'main';
+  if (state.logMode === next) state.mgrNext = null;
+  renderChecklist();
+  window.scrollTo(0, 0);
+}
+
+function managerView(sk) {
+  // Το Αρχείο ανοίγει με τον κωδικό αρχείου (area manager).
+  if (state.logMode === 'unlock') return unlockForm();
+  if (state.logMode === 'archive') return shared() && state.archive ? archiveShared() : archiveView(sk, deviceSrc(sk));
+  if (!managerOpen(sk)) return managerUnlockForm(sk);
+  if (shared()) {
+    if (!sync.busy[sk] && Date.now() - (sync.tried[sk] || 0) > 60000) syncStore(sk);
+    if (!isSynced(sk)) return waitBox(sk);
+  }
+  const setup = getEquip(sk);
+  if (state.logMode === 'setup') return setupForm(sk, setup);
+  if (state.logMode === 'plan' && setup && state.planEdit && state.planEdit.sk === sk) return planEditor(sk, setup);
+  if (state.logMode !== 'main') state.logMode = 'main';
+  return managerMenu(sk, setup);
+}
+
+function managerUnlockForm(sk) {
   // Κείμενο με τελείες αντί για πεδίο κωδικού: ο browser δεν το συμπληρώνει μόνος του με τον κωδικό αρχείου.
   const pw = h('input', { type: 'text', class: 'pw-mask', autocomplete: 'off', autocapitalize: 'off', autocorrect: 'off', spellcheck: 'false', name: 'plan-code', placeholder: 'Κωδικός υπευθύνου' });
   const btn = h('button', { type: 'submit', class: 'btn dark' }, 'Είσοδος');
@@ -1290,18 +1283,50 @@ function planUnlockForm(sk) {
     }
     state.planPw = pw.value.trim();
     state.planPwStore = sk;
-    state.planEdit = initPlanEdit(sk, plannerMonth());
-    state.logMode = 'plan';
+    state.logMode = state.mgrNext || 'main';
+    state.mgrNext = null;
     renderLog();
   };
   setTimeout(() => pw.focus(), 0);
   return h('div', { class: 'log' }, h('form', { class: 'box', onsubmit: go },
-    h('h2', {}, `📅 Πρόγραμμα μήνα – ${storeLabel()}`),
-    h('p', { class: 'hint' }, 'Μόνο για τον/την υπεύθυνο καταστήματος.'),
+    h('h2', {}, storeLabel()),
+    h('p', { class: 'hint' }, 'Μόνο για τον/την υπεύθυνο καταστήματος: πρόγραμμα μήνα, εξοπλισμός, κενά έντυπα, αρχείο.'),
     h('label', { class: 'field' }, 'Κωδικός υπευθύνου', pw),
-    h('div', { class: 'stack' },
-      btn,
-      h('button', { type: 'button', class: 'btn ghost', onclick: () => { state.logMode = 'main'; renderLog(); } }, 'Πίσω'))));
+    btn));
+}
+
+function managerMenu(sk, setup) {
+  const ym = ymOf(f.date.value || todayISO());
+  const item = (ic, title, sub, onclick) => h('button', { type: 'button', class: 'mgr-item', onclick },
+    h('span', { class: 'mgr-ic', 'aria-hidden': 'true' }, ic),
+    h('span', { class: 'mgr-txt' }, h('b', {}, title), h('small', {}, sub)),
+    h('span', { class: 'mgr-go', 'aria-hidden': 'true' }, '›'));
+  const needEquip = (fn) => () => (setup ? fn() : toast('Δήλωσε πρώτα τον εξοπλισμό του καταστήματος.'));
+  return h('div', { class: 'log mgr' },
+    h('p', { class: 'mgr-store' }, storeLabel()),
+    !setup ? h('div', { class: 'log-warn' },
+      h('div', { class: 'log-warn-title' }, '⚠️ Δεν έχει δηλωθεί εξοπλισμός'),
+      h('p', {}, 'Ξεκίνα από το «Εξοπλισμός καταστήματος». Μετά εμφανίζονται οι εργασίες στις ΚΑΘΑΡΙΟΤΗΤΕΣ / ΑΠΟΨΥΞΕΙΣ.')) : null,
+    h('div', { class: 'mgr-list' },
+      item('📅', 'Πρόγραμμα μήνα', 'Ημέρες καθαριοτήτων και αποψύξεων', needEquip(() => openPlanner(sk))),
+      item('🧊', 'Εξοπλισμός καταστήματος', setup ? 'Καταψύξεις, βιτρίνες, μηχανήματα, χώροι' : 'Δήλωση: καταψύξεις, βιτρίνες, μηχανήματα, χώροι',
+        () => { state.logMode = 'setup'; renderLog(); scrollToLog(); }),
+      item('🖨', 'Κενά έντυπα', 'Για εκτύπωση: άνοιγμα, κλείσιμο, καθαριότητες, αποψύξεις (Excel / PDF)', openBlankForms),
+      item('📊', 'Ο μήνας σε Excel / PDF', 'Τι έγινε και τι όχι, ανά ημέρα', needEquip(() => openLogExport(sk, ym, deviceSrc(sk), shared() ? 2 : 13))),
+      item('🔒', 'Αρχείο', 'Όλα τα καταστήματα · με τον κωδικό αρχείου (area manager)', openArchive)),
+    syncOn() && !isDemo() ? h('section', { class: 'actions' },
+      h('button', { type: 'button', class: 'btn ghost', onclick: lockManager }, '🔒 Κλείδωμα υπευθύνου')) : null,
+    h('p', { class: 'mgr-admin' }, h('a', { href: '#admin' }, 'Διαχείριση εφαρμογής (area manager)')));
+}
+
+// Κλείδωμα: ξεχνιούνται οι κωδικοί υπευθύνου και αρχείου και η εφαρμογή γυρίζει στην αρχική.
+function lockManager() {
+  state.planPw = '';
+  state.planPwStore = '';
+  state.archivePw = '';
+  state.archive = null;
+  sessSet(LOG_LS.unlocked, '');
+  uiBack();
 }
 
 // Αρχικό πρόγραμμα: ό,τι έχει αποθηκευτεί, αλλιώς η αυτόματη πρόταση της εφαρμογής.
@@ -1572,43 +1597,35 @@ function planEditor(sk, setup) {
     rerender();
   };
 
-  const back = () => {
-    if (ed.dirty && !confirm('Υπάρχουν αλλαγές που δεν αποθηκεύτηκαν. Να χαθούν;')) return;
-    state.planEdit = null;
-    state.logMode = 'main';
-    renderLog();
-  };
-
   return h('div', { class: 'log planner' },
     h('div', { class: 'box' },
-      h('h2', {}, `📅 Πρόγραμμα μήνα – ${storeLabel()}`),
+      h('h2', {}, storeLabel()),
       h('label', { class: 'field' }, 'Μήνας', selMonth),
-      h('p', { class: 'hint' }, ed.own ? 'Υπάρχει αποθηκευμένο πρόγραμμα του υπευθύνου για αυτόν τον μήνα.' : 'Φαίνεται η αυτόματη πρόταση της εφαρμογής. Άλλαξέ τη όπως θέλεις και πάτα «Αποθήκευση προγράμματος».')),
+      h('p', { class: 'hint' }, ed.own ? 'Υπάρχει αποθηκευμένο πρόγραμμα του υπευθύνου για αυτόν τον μήνα.' : 'Φαίνεται η αυτόματη πρόταση της εφαρμογής. Άλλαξέ τη όπως θέλεις και πάτα «Αποθήκευση προγράμματος».'),
+      h('div', { class: 'plan-bulk-title' }, `Για όλο τον εξοπλισμό${from > 1 ? ', από σήμερα και μετά' : ''}:`),
+      h('div', { class: 'plan-bulk' },
+        h('button', { type: 'button', class: 'btn auto', onclick: autoAll }, '⚡ Αυτόματη κατανομή όλων'),
+        h('button', { type: 'button', class: 'btn', onclick: copyPrev }, '⎘ Όπως τον προηγούμενο μήνα'),
+        h('button', { type: 'button', class: 'btn danger', onclick: clearAll }, '✕ Αφαίρεση όλων'))),
     typeSeg,
     units.length ? h('div', { class: 'box' },
-      h('label', { class: 'field' }, '1. Διάλεξε εξοπλισμό / χώρο', selUnit),
+      h('label', { class: 'field' }, 'Εξοπλισμός / χώρος', selUnit),
       h('p', { class: 'plan-rule' }, `${LOG_TYPES[ed.type]} · ${freqText(u.rule)}`),
       status,
       h('p', { class: 'hint' }, from > 1
-        ? '2. Πάτα τις ημέρες που θα γίνει. Ξαναπάτα για να τη βγάλεις. Οι ημέρες πριν από σήμερα και όσες έχουν ήδη γίνει δεν αλλάζουν.'
-        : '2. Πάτα τις ημέρες που θα γίνει. Ξαναπάτα για να τη βγάλεις.'),
+        ? 'Πάτα τις ημέρες που θα γίνει· ξαναπάτα για να τη βγάλεις. Οι ημέρες πριν από σήμερα δεν αλλάζουν.'
+        : 'Πάτα τις ημέρες που θα γίνει· ξαναπάτα για να τη βγάλεις.'),
       h('div', { class: 'cal-grid' }, cells),
       from > 1 ? h('p', { class: 'hint plan-legend' }, '✓ έγινε · ⚠️ με καθυστέρηση · ⏳ σε καθυστέρηση · ✗ δεν έγινε · ⊘ με αιτία') : null,
-      h('button', { type: 'button', class: 'btn auto', onclick: autoUnit }, `⚡ Αυτόματη κατανομή – ${u.label}`),
-      h('button', { type: 'button', class: 'btn auto', onclick: autoAll }, '⚡ Αυτόματη κατανομή όλων'),
-      h('button', { type: 'button', class: 'btn danger', onclick: clearAll }, 'Αφαίρεση όλων των εργασιών του μήνα'),
-      h('p', { class: 'hint' }, from > 1
-        ? 'Η πρώτη κατανομή αφορά μόνο τον εξοπλισμό που φαίνεται. Η «κατανομή όλων» και η «αφαίρεση όλων» αφορούν όλο τον εξοπλισμό και τα δύο είδη. Όλα αλλάζουν μόνο από σήμερα και μετά.'
-        : 'Η πρώτη κατανομή αφορά μόνο τον εξοπλισμό που φαίνεται. Η «κατανομή όλων» και η «αφαίρεση όλων» αφορούν όλο τον εξοπλισμό και τα δύο είδη.'))
+      h('button', { type: 'button', class: 'btn auto', onclick: autoUnit }, `⚡ Αυτόματα – ${u.label}`))
       : h('p', { class: 'hint' }, 'Δεν υπάρχει εξοπλισμός για αυτό το είδος.'),
     ed.problems.length ? h('div', { class: 'log-alert' },
       h('div', { class: 'log-alert-title' }, 'Δεν αποθηκεύτηκε: λείπουν ημέρες'),
       h('p', { class: 'hint' }, 'Πάτα μια γραμμή για να πας στον εξοπλισμό. Ή πάτα «⚡ Αυτόματη κατανομή όλων».'),
       h('ul', {}, ed.problems.map((p) => h('li', {}, h('button', { type: 'button', class: 'linkbtn', onclick: () => goTo(p) }, p.text))))) : null,
-    h('section', { class: 'actions' },
-      h('button', { type: 'button', class: 'btn dark', onclick: (e) => save(e.currentTarget) }, 'Αποθήκευση προγράμματος'),
-      h('button', { type: 'button', class: 'btn', onclick: copyPrev }, 'Αντιγραφή από τον προηγούμενο μήνα'),
-      h('button', { type: 'button', class: 'btn ghost', onclick: back }, 'Πίσω')));
+    // Σταθερά στο κάτω μέρος της οθόνης.
+    h('div', { class: 'plan-save' },
+      h('button', { type: 'button', class: 'btn dark', onclick: (e) => save(e.currentTarget) }, ed.dirty ? 'Αποθήκευση προγράμματος •' : 'Αποθήκευση προγράμματος')));
 }
 
 /* ---- Ημερολόγιο μήνα ---- */
@@ -1658,8 +1675,11 @@ function calendarEl(sk, setup, type) {
     return h('span', { class: 'todo-tag' }, '○');
   };
 
+  const typeSeg = h('div', { class: 'seg log-type' }, Object.entries(LOG_TYPES).map(([k, label]) =>
+    h('button', { type: 'button', 'aria-pressed': String(k === type), onclick: () => { state.logType = k; state.logCalOpen = true; renderLog(); } }, label)));
   const det = h('details', { class: 'box cal', open: !!state.logCalOpen },
-    h('summary', {}, `Πρόγραμμα μήνα – ${LOG_TYPES[type]}`),
+    h('summary', {}, '📅 Όλος ο μήνας'),
+    typeSeg,
     h('div', { class: 'cal-nav' },
       h('button', { type: 'button', 'aria-label': 'Προηγούμενος μήνας', onclick: () => nav(-1) }, '‹'),
       h('b', {}, monthLabel(ym)),
@@ -1691,8 +1711,8 @@ function setupForm(sk, setup) {
   });
 
   const save = () => {
-    const name = f.name.value.trim();
-    if (!name) { toast('Συμπλήρωσε πρώτα το όνομα του υπευθύνου (πάνω).'); f.name.focus(); return; }
+    const name = f.name.value.trim() || (isDemo() ? 'DEMO' : '');
+    if (!name) { toast('Συμπλήρωσε πρώτα το όνομά σου.'); askWho(); return; }
     if (editing && !confirm('Να αποθηκευτεί ο νέος εξοπλισμός; Αλλάζει το πρόγραμμα και ο έλεγχος του μήνα.')) return;
     const today = todayISO();
     const next = { counts, since: setup && setup.since ? setup.since : today, by: name, at: new Date().toISOString() };
@@ -1716,7 +1736,7 @@ function setupForm(sk, setup) {
     renderLog();
     updateTodoBadge();
     scrollToLog();
-    toast('Ο εξοπλισμός του καταστήματος αποθηκεύτηκε.');
+    toast('✓ Ο εξοπλισμός του καταστήματος αποθηκεύτηκε.');
   };
 
   return h('div', { class: 'log log-setup' },
@@ -1725,8 +1745,8 @@ function setupForm(sk, setup) {
       editing
         ? h('p', {}, 'Αλλαγή εξοπλισμού του καταστήματος. Γίνεται ', h('b', {}, 'μόνο από τον/την υπεύθυνο καταστήματος'), ' και επηρεάζει το πρόγραμμα και τον έλεγχο του μήνα.')
         : [
-          h('p', {}, `Πρώτη χρήση του αρχείου καθαριοτήτων/αποψύξεων για το κατάστημα «${storeLabel()}»${shared() ? '' : ' σε αυτή τη συσκευή'}.`),
-          h('p', {}, h('b', {}, 'Ο/Η υπεύθυνος καταστήματος'), ' δηλώνει πρώτα τον εξοπλισμό του καταστήματος. Αν δεν είσαι ο/η υπεύθυνος καταστήματος, μην προχωρήσεις.'),
+          h('p', {}, `Πρώτη δήλωση εξοπλισμού για το κατάστημα «${storeLabel()}»${shared() ? '' : ' σε αυτή τη συσκευή'}.`),
+          h('p', {}, 'Μετά εμφανίζονται οι εργασίες κάθε ημέρας στις ΚΑΘΑΡΙΟΤΗΤΕΣ / ΑΠΟΨΥΞΕΙΣ.'),
         ]),
     h('div', { class: 'box' },
       h('h2', {}, 'Μηχανήματα κατάψυξης/συντήρησης και βιτρίνες παγωτού'),
@@ -1749,8 +1769,7 @@ function setupForm(sk, setup) {
     h('p', { class: 'hint' }, 'Υπεύθυνος: ', whoEl()),
     h('div', { class: 'stack' },
       h('button', { type: 'button', class: 'btn dark', onclick: save }, 'Αποθήκευση εξοπλισμού'),
-      editing ? h('button', { type: 'button', class: 'btn ghost', onclick: () => { state.logMode = 'main'; renderLog(); } }, 'Ακύρωση') : null,
-      !editing && shared() ? h('button', { type: 'button', class: 'btn ghost', onclick: () => openArchive() }, '🔒 Αρχείο (με κωδικό)') : null));
+      h('button', { type: 'button', class: 'btn ghost', onclick: () => { state.logMode = 'main'; renderLog(); scrollToLog(); } }, 'Ακύρωση')));
 }
 
 /* ---- Αρχείο με κωδικό ---- */

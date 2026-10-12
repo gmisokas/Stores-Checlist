@@ -12,19 +12,13 @@
   <link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
   <link rel="icon" type="image/png" href="assets/favicon.png">
   <title>Lartecono Stores Checklist</title>
-  <link rel="stylesheet" href="style.css?v=28">
+  <link rel="stylesheet" href="style.css?v=29">
 </head>
 <body>
   <div id="app">
-    <header class="topbar">
+    <header class="topbar" id="topbar">
       <img class="logo" src="assets/logo.png" alt="Lartecono DaVinci">
-      <div id="top-date" class="top-date"></div>
     </header>
-
-    <section class="hero">
-      <div class="hero-title">Checklist καταστήματος</div>
-      <div id="hero-sub" class="hero-sub"></div>
-    </section>
 
     <div id="draft-banner" class="draft-banner" hidden>
       Βλέπεις αλλαγές που <b>δεν έχουν αποθηκευτεί για όλους</b>.
@@ -33,60 +27,93 @@
 
     <!-- ===== Οθόνη checklist (υπάλληλος) ===== -->
     <main id="view-checklist">
-      <div id="demo-banner" class="demo-banner" hidden>
-        🎓 <b>DEMO</b>: δοκιμή χωρίς κίνδυνο. Τίποτα δεν αποθηκεύεται στο αρχείο ούτε στέλνεται στο Viber.
-        <button type="button" class="linkbtn" id="demo-help">Οδηγίες</button>
-      </div>
-      <section class="fields">
-        <label>Ημερομηνία
-          <input type="date" id="f-date">
-        </label>
-        <label>Υπεύθυνος
-          <input type="text" id="f-name" placeholder="Ονοματεπώνυμο" autocomplete="name">
-        </label>
-        <label>Κατάστημα
-          <select id="f-store"></select>
-        </label>
-      </section>
-
-      <div class="sticky">
-        <div class="pick-label">Επιλέξτε:</div>
-        <div id="section-seg" class="seg seg4" role="group" aria-label="Ενότητα">
-          <button type="button" data-section="opening">ΑΝΟΙΓΜΑ</button>
-          <button type="button" data-section="closing">ΚΛΕΙΣΙΜΟ</button>
-          <button type="button" data-section="log">ΚΑΘΑΡΙΟΤΗΤΕΣ&nbsp;/ ΑΠΟΨΥΞΕΙΣ</button>
-          <button type="button" data-section="todo">ΕΚΚΡΕΜΟΤΗΤΕΣ <span id="todo-badge" class="badge" hidden></span></button>
+      <!-- Μπάρα ενότητας: «‹ Αρχική», τίτλος και πρόοδος (μένει πάνω όταν κατεβαίνεις) -->
+      <div id="sec-bar" class="sec-bar" hidden>
+        <div class="sec-top">
+          <button type="button" id="go-back" class="back-btn">‹ <span id="back-label">Αρχική</span></button>
+          <div id="sec-title" class="sec-title"></div>
         </div>
-        <div class="progress">
+        <div id="progress" class="progress" hidden>
           <div class="bar"><div id="bar-fill"></div></div>
           <div id="progress-text" class="progress-text"></div>
         </div>
       </div>
+
+      <div id="demo-banner" class="demo-banner" hidden>
+        🎓 <b>DEMO</b>: δοκιμή χωρίς κίνδυνο. Τίποτα δεν αποθηκεύεται στο αρχείο ούτε στέλνεται στο Viber.
+        <button type="button" class="linkbtn" id="demo-help">Οδηγίες</button> ·
+        <button type="button" class="linkbtn" id="demo-exit">Έξοδος</button>
+      </div>
+
+      <!-- Κατάστημα · όνομα · ημέρα, σε μία γραμμή. Με το ✎ αλλάζουν. -->
+      <section id="who" class="who">
+        <button type="button" id="who-line" class="who-line" aria-expanded="false">
+          <span id="who-text" class="who-text"></span>
+          <span class="who-pen" aria-hidden="true">✎</span>
+        </button>
+        <div id="who-box" class="box who-box" hidden>
+          <h2 id="who-title">Στοιχεία</h2>
+          <label class="field">Κατάστημα
+            <select id="f-store"></select>
+          </label>
+          <label class="field">Ονοματεπώνυμο
+            <input type="text" id="f-name" placeholder="π.χ. Μαρία Παπαδοπούλου" autocomplete="name">
+          </label>
+          <label class="field" id="date-field">Ημερομηνία
+            <input type="date" id="f-date">
+          </label>
+          <p class="hint" id="date-hint">Άλλαξέ τη μόνο για καταχώρηση της χθεσινής ημέρας.</p>
+          <button type="button" class="btn dark" id="who-done">Συνέχεια</button>
+        </div>
+      </section>
+
+      <!-- ===== Αρχική ===== -->
+      <section id="home" class="home" hidden>
+        <div class="tiles">
+          <button type="button" class="tile t-opening" data-section="opening">
+            <span class="tile-ic" aria-hidden="true">☀️</span>
+            <span class="tile-name">ΑΝΟΙΓΜΑ</span>
+            <span class="tile-sub" id="sub-opening"></span>
+          </button>
+          <button type="button" class="tile t-closing" data-section="closing">
+            <span class="tile-ic" aria-hidden="true">🌙</span>
+            <span class="tile-name">ΚΛΕΙΣΙΜΟ</span>
+            <span class="tile-sub" id="sub-closing"></span>
+          </button>
+          <button type="button" class="tile t-log wide" data-section="log">
+            <span class="tile-ic" aria-hidden="true">🧽</span>
+            <span class="tile-name">ΚΑΘΑΡΙΟΤΗΤΕΣ / ΑΠΟΨΥΞΕΙΣ <span id="todo-badge" class="badge" hidden></span></span>
+            <span class="tile-sub" id="sub-log"></span>
+          </button>
+        </div>
+        <button type="button" class="btn mgr-btn" data-section="manager">⚙️ Υπεύθυνος καταστήματος</button>
+      </section>
 
       <p id="legend" class="legend" hidden>
         <span class="swatch"></span>
         Η χρωματισμένη γραμμή αφορά ιδιαιτερότητα του συγκεκριμένου καταστήματος.
       </p>
 
-      <ol id="items" class="items"></ol>
+      <ol id="items" class="items" hidden></ol>
 
-      <!-- Αρχείο γενικών καθαριοτήτων / αποψύξεων -->
+      <!-- Καθαριότητες / αποψύξεις και οθόνες του υπευθύνου -->
       <section id="log-view" hidden></section>
 
-      <section id="checklist-actions" class="actions">
-        <button type="button" id="btn-share" class="btn primary">Αποστολή στο Viber</button>
-        <button type="button" id="btn-archive" class="btn archive" hidden>Αποθήκευση στο αρχείο</button>
+      <section id="checklist-actions" class="actions" hidden>
+        <button type="button" id="btn-share" class="btn primary">✅ Ολοκλήρωση – Αποστολή στο Viber</button>
         <p id="archive-status" class="save-status" hidden></p>
-        <button type="button" id="btn-excel" class="btn">Αποθήκευση σε Excel / PDF</button>
-        <button type="button" id="btn-print" class="btn">Εκτύπωση A4</button>
-        <button type="button" id="btn-reset" class="btn danger">Καθαρισμός</button>
+        <details id="more" class="more">
+          <summary class="btn">⋯ Περισσότερα</summary>
+          <div class="more-list">
+            <button type="button" id="btn-archive" class="btn" hidden>Αποθήκευση στο αρχείο (χωρίς Viber)</button>
+            <button type="button" id="btn-excel" class="btn">Αποθήκευση σε Excel / PDF</button>
+            <button type="button" id="btn-print" class="btn">Εκτύπωση A4</button>
+            <button type="button" id="btn-reset" class="btn danger">Καθαρισμός</button>
+          </div>
+        </details>
       </section>
 
-      <section id="blank-forms" class="actions" hidden>
-        <button type="button" id="btn-blank" class="btn">🖨 Κενά έντυπα (Excel / PDF)</button>
-      </section>
-
-      <footer class="foot"><a href="#" id="open-a2hs">Οδηγίες εγκατάστασης</a> · <a href="#admin">Διαχείριση</a></footer>
+      <footer id="home-foot" class="foot"><button type="button" class="linkbtn" id="open-tour">🎓 Εκπαίδευση (DEMO)</button> · <a href="#" id="open-a2hs">Οδηγίες εγκατάστασης</a></footer>
     </main>
 
     <!-- ===== Οθόνη διαχείρισης ===== -->
@@ -143,8 +170,8 @@
 
   <div id="toast" class="toast" hidden></div>
 
-  <script src="cleaning.js?v=28"></script>
-  <script src="app.js?v=28"></script>
-  <script src="tour.js?v=28"></script>
+  <script src="cleaning.js?v=29"></script>
+  <script src="app.js?v=29"></script>
+  <script src="tour.js?v=29"></script>
 </body>
 </html>

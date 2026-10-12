@@ -7,7 +7,7 @@
    ========================================================== */
 
 // Έκδοση της εφαρμογής. Σε κάθε αλλαγή: ίδιος αριθμός εδώ, στο version.json και στα ?v= του index.html.
-const APP_VERSION = '26';
+const APP_VERSION = '27';
 // Οι ενότητες γράφονται πάντα με κεφαλαία (ΑΝΟΙΓΜΑ, ΚΛΕΙΣΙΜΟ, ΚΑΘΑΡΙΟΤΗΤΕΣ / ΑΠΟΨΥΞΕΙΣ, ΕΚΚΡΕΜΟΤΗΤΕΣ).
 const SECTIONS = { opening: 'ΑΝΟΙΓΜΑ', closing: 'ΚΛΕΙΣΙΜΟ' };
 const GENERAL_ID = '__general';
@@ -272,6 +272,7 @@ function renderChecklist() {
   $('legend').hidden = !rows.some((r) => r.extra);
   document.querySelector('#view-checklist .progress').hidden = !chosen;
   $('checklist-actions').hidden = !chosen;
+  $('blank-forms').hidden = !f.store.value;
   document.querySelectorAll('#section-seg button').forEach((b) => {
     b.setAttribute('aria-pressed', String(b.dataset.section === state.section));
   });
@@ -694,15 +695,16 @@ function checklistSheet() {
 }
 
 // Ένα φύλλο: γραμμές XML, πλάτη στηλών, «πάγωμα» κεφαλίδας, προσανατολισμός A4.
-function sheetXml(rowsXml, colsXml, paneAttrs, orientation) {
+// fit: όλο το φύλλο σε μία σελίδα κατά την εκτύπωση.
+function sheetXml(rowsXml, colsXml, paneAttrs, orientation, fit) {
   return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
 <sheetPr><pageSetUpPr fitToPage="1"/></sheetPr>
-<sheetViews><sheetView workbookViewId="0"><pane ${paneAttrs} state="frozen"/></sheetView></sheetViews>
+<sheetViews><sheetView workbookViewId="0">${paneAttrs ? `<pane ${paneAttrs} state="frozen"/>` : ''}</sheetView></sheetViews>
 <cols>${colsXml}</cols>
 <sheetData>${rowsXml.join('')}</sheetData>
 <pageMargins left="0.4" right="0.4" top="0.5" bottom="0.5" header="0.3" footer="0.3"/>
-<pageSetup paperSize="9" orientation="${orientation}" fitToWidth="1" fitToHeight="0"/>
+<pageSetup paperSize="9" orientation="${orientation}" fitToWidth="1" fitToHeight="${fit ? 1 : 0}"/>
 </worksheet>`;
 }
 
@@ -793,14 +795,12 @@ function sheetPages(sheet) {
   const PW = land ? 841.89 : 595.28;
   const PH = land ? 595.28 : 841.89;
   const M = 28; // περιθώριο ~1 εκ.
-  const widths = [];
-  sheet.cols.forEach(([a, b, w]) => { for (let c = a; c <= b; c++) widths[c - 1] = Math.round(w * 7 + 5); });
-  for (let c = 0; c < widths.length; c++) if (!widths[c]) widths[c] = 69;
-  const xs = [0];
-  widths.forEach((w, i) => { xs[i + 1] = xs[i] + w; });
-  const total = xs[widths.length];
-  const k = Math.min(1, (PW - 2 * M) / (total * 0.75)) * 0.75; // pixel → point
-  const areaH = (PH - 2 * M - 14) / k;
+  const base = [];
+  sheet.cols.forEach(([a, b, w]) => { for (let c = a; c <= b; c++) base[c - 1] = Math.round(w * 7 + 5); });
+  for (let c = 0; c < base.length; c++) if (!base[c]) base[c] = 69;
+  let widths;
+  let xs;
+  let total;
   const FS = 14.7; // 11 pt
   const PAD = 4;
   const measure = document.createElement('canvas').getContext('2d');
@@ -809,7 +809,7 @@ function sheetPages(sheet) {
   // Διάταξη κάθε γραμμής: κελιά με γραμμές κειμένου και ύψος.
   const layout = (cells) => {
     if (!cells) return { h: 12, cells: [] };
-    let hgt = 0;
+    let hgt = cells.ht ? cells.ht / 0.75 : 0; // ύψος γραμμής του Excel (point) → pixel
     const out = cells.map(([col, v, s]) => {
       const st = PDF_ST[s] || {};
       const x = xs[col] || 0;
@@ -830,8 +830,31 @@ function sheetPages(sheet) {
     });
     return { h: Math.ceil(hgt), cells: out };
   };
-  const rows = sheet.rows.map(layout);
+  // Διάταξη με extra pixel στη στήλη sheet.grow· k = pixel → point, όσο χωράει στο πλάτος
+  // (και στο ύψος, αν όλο το φύλλο πρέπει να μπει σε μία σελίδα).
+  const build = (extra) => {
+    widths = base.map((w, i) => (i === sheet.grow ? w + extra : w));
+    xs = [0];
+    widths.forEach((w, i) => { xs[i + 1] = xs[i] + w; });
+    total = xs[widths.length];
+    const list = sheet.rows.map(layout);
+    let kk = Math.min(1, (PW - 2 * M) / (total * 0.75)) * 0.75;
+    if (sheet.fit) kk = Math.min(kk, (PH - 2 * M - 14) / list.reduce((n, r) => n + r.h, 0));
+    return { list, kk, extra };
+  };
+  let best = build(0);
+  // Σε μία σελίδα: φαρδύτερη στήλη = λιγότερες γραμμές κειμένου = μεγαλύτερα γράμματα. Κρατάμε το καλύτερο.
+  if (sheet.fit && sheet.grow != null) {
+    for (let extra = 40; extra <= 2400; extra += 40) {
+      const t = build(extra);
+      if (t.kk > best.kk) best = t;
+    }
+    best = build(best.extra);
+  }
+  const rows = best.list;
+  const k = best.kk;
   const head = sheet.head ? [sheet.head[0] - 1, sheet.head[1] - 1] : null;
+  const areaH = sheet.fit ? Infinity : (PH - 2 * M - 14) / k;
 
   // Μοίρασμα σε σελίδες· η κεφαλίδα του πίνακα επαναλαμβάνεται σε κάθε σελίδα.
   const pages = [[]];
@@ -1696,6 +1719,7 @@ async function init() {
     if (f.store.value && getDraft(f.store.value).length) { e.preventDefault(); e.returnValue = ''; }
   });
   $('btn-excel').addEventListener('click', exportChecklist);
+  $('btn-blank').addEventListener('click', openBlankForms);
   $('btn-print').addEventListener('click', () => {
     if (!SECTIONS[state.section]) { toast('Επίλεξε πρώτα «ΑΝΟΙΓΜΑ» ή «ΚΛΕΙΣΙΜΟ».'); return; }
     renderPrint();

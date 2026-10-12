@@ -7,7 +7,7 @@
    ========================================================== */
 
 // Έκδοση της εφαρμογής. Σε κάθε αλλαγή: ίδιος αριθμός εδώ, στο version.json και στα ?v= του index.html.
-const APP_VERSION = '29';
+const APP_VERSION = '30';
 // Οι ενότητες γράφονται πάντα με κεφαλαία (ΑΝΟΙΓΜΑ, ΚΛΕΙΣΙΜΟ, ΚΑΘΑΡΙΟΤΗΤΕΣ / ΑΠΟΨΥΞΕΙΣ).
 const SECTIONS = { opening: 'ΑΝΟΙΓΜΑ', closing: 'ΚΛΕΙΣΙΜΟ' };
 // Τίτλος στη μπάρα κάθε ενότητας (στον υπεύθυνο, ανάλογα με την οθόνη: managerTitle στο cleaning.js).
@@ -50,6 +50,9 @@ const state = {
   planEdit: null,
   // Μετά τον κωδικό υπευθύνου: κατευθείαν σε αυτή την οθόνη (π.χ. 'setup').
   mgrNext: null,
+  // Το κατάστημα που χρησιμοποιεί η εφαρμογή και αν η νέα επιλογή επιβεβαιώθηκε.
+  storeNow: '',
+  storeOk: false,
   planPw: '',
   planPwStore: '',
   archSaving: false,
@@ -250,6 +253,50 @@ function fillStoreSelect() {
     ...state.data.stores.map((s) => h('option', { value: s.id }, s.name || '(χωρίς όνομα)')),
   ].filter(Boolean));
   f.store.value = keep === GENERAL_ID || keep === DEMO_ID || state.data.stores.some((s) => s.id === keep) ? keep : '';
+  state.storeNow = f.store.value;
+}
+
+/* ---------- Επιβεβαίωση καταστήματος ---------- */
+
+// Για να μη διαλέξει κάποιος κατά λάθος άλλο κατάστημα: πληκτρολογεί το όνομά του.
+// Δεν ζητείται για το DEMO ούτε για το κατάστημα που έχει ήδη το κινητό.
+function needsConfirm(id) { return !!id && id !== DEMO_ID && id !== (lsGet(LS.last, {}).store || ''); }
+
+// Χωρίς τόνους, κεφαλαία, χωρίς διπλά κενά: «Ψυρρή» = «ΨΥΡΡΗ».
+function storeKey(s) {
+  return String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase().replace(/\s+/g, ' ').trim();
+}
+
+function confirmStore(id) {
+  const st = state.data.stores.find((s) => s.id === id);
+  const name = id === GENERAL_ID ? 'ΓΕΝΙΚΟ' : (st && st.name) || '';
+  const dlg = $('log-dialog');
+  const input = h('input', { type: 'text', autocomplete: 'off', autocapitalize: 'characters', autocorrect: 'off', spellcheck: 'false' });
+  const msg = h('p', { class: 'warn', hidden: true });
+  const ok = (e) => {
+    e.preventDefault();
+    if (storeKey(input.value) !== storeKey(name)) {
+      msg.textContent = `Δεν ταιριάζει. Πληκτρολογήστε: ${name}`;
+      msg.hidden = false;
+      input.select();
+      return;
+    }
+    dlg.close();
+    state.storeOk = true;
+    f.store.value = id;
+    f.store.dispatchEvent(new Event('change'));
+  };
+  $('log-dialog-body').replaceChildren(h('form', { class: 'store-confirm', onsubmit: ok },
+    h('h2', {}, 'Επιβεβαίωση καταστήματος'),
+    h('p', {}, 'Για επιβεβαίωση πληκτρολογήστε το όνομα του καταστήματος όπως το βλέπετε:'),
+    h('div', { class: 'store-name' }, name),
+    h('label', { class: 'field' }, 'Όνομα καταστήματος', input),
+    msg,
+    h('div', { class: 'stack' },
+      h('button', { type: 'submit', class: 'btn dark' }, 'Επιβεβαίωση'),
+      h('button', { type: 'button', class: 'btn ghost', onclick: () => dlg.close() }, 'Άκυρο'))));
+  dlg.showModal();
+  setTimeout(() => input.focus(), 50);
 }
 
 function demoOption() { return h('option', { value: DEMO_ID }, 'DEMO – εκπαίδευση'); }
@@ -1858,6 +1905,15 @@ async function init() {
 
   f.date.addEventListener('change', () => { if (!f.date.value) f.date.value = todayISO(); renderChecklist(); });
   f.store.addEventListener('change', () => {
+    // Νέο κατάστημα: πρώτα επιβεβαίωση με το όνομα. Μέχρι τότε μένει το προηγούμενο.
+    const want = f.store.value;
+    if (!state.storeOk && needsConfirm(want)) {
+      f.store.value = state.storeNow;
+      confirmStore(want);
+      return;
+    }
+    state.storeOk = false;
+    state.storeNow = want;
     rememberLast();
     state.logMode = 'main';
     state.logArchiveMonth = null;

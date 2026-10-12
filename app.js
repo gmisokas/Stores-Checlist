@@ -7,7 +7,7 @@
    ========================================================== */
 
 // Έκδοση της εφαρμογής. Σε κάθε αλλαγή: ίδιος αριθμός εδώ, στο version.json και στα ?v= του index.html.
-const APP_VERSION = '30';
+const APP_VERSION = '31';
 // Οι ενότητες γράφονται πάντα με κεφαλαία (ΑΝΟΙΓΜΑ, ΚΛΕΙΣΙΜΟ, ΚΑΘΑΡΙΟΤΗΤΕΣ / ΑΠΟΨΥΞΕΙΣ).
 const SECTIONS = { opening: 'ΑΝΟΙΓΜΑ', closing: 'ΚΛΕΙΣΙΜΟ' };
 // Τίτλος στη μπάρα κάθε ενότητας (στον υπεύθυνο, ανάλογα με την οθόνη: managerTitle στο cleaning.js).
@@ -1948,6 +1948,7 @@ async function init() {
   $('btn-share').addEventListener('click', share);
   $('btn-archive').addEventListener('click', sendToArchive);
   $('btn-excel').addEventListener('click', exportChecklist);
+  $('btn-blank').addEventListener('click', openBlankForms);
   $('btn-print').addEventListener('click', () => {
     if (!SECTIONS[state.section]) return;
     renderPrint();

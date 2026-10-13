@@ -7,7 +7,7 @@
    ========================================================== */
 
 // Έκδοση της εφαρμογής. Σε κάθε αλλαγή: ίδιος αριθμός εδώ, στο version.json και στα ?v= του index.html.
-const APP_VERSION = '31';
+const APP_VERSION = '32';
 // Οι ενότητες γράφονται πάντα με κεφαλαία (ΑΝΟΙΓΜΑ, ΚΛΕΙΣΙΜΟ, ΚΑΘΑΡΙΟΤΗΤΕΣ / ΑΠΟΨΥΞΕΙΣ).
 const SECTIONS = { opening: 'ΑΝΟΙΓΜΑ', closing: 'ΚΛΕΙΣΙΜΟ' };
 // Τίτλος στη μπάρα κάθε ενότητας (στον υπεύθυνο, ανάλογα με την οθόνη: managerTitle στο cleaning.js).
@@ -853,15 +853,17 @@ const XS = {
   title: 1, label: 2, head: 3, cell: 4, center: 5, xCell: 6, xCenter: 7, imp: 8, impX: 9,
   // Αρχείο καθαριοτήτων/αποψύξεων
   dCell: 10, dSug: 11, dDone: 12, dWe: 13, headWe: 14, bad: 15, good: 16, dLate: 17, dMiss: 18, dSkip: 19,
+  // Γραμμές με απαλό φόντο (εναλλάξ), για να βρίσκει το μάτι τη γραμμή
+  zCell: 20, zCenter: 21, zImp: 22, zDCell: 23,
 };
 
 const XLSX_STYLES = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
 <fonts count="5"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><color rgb="FFC62828"/><name val="Calibri"/></font><font><b/><sz val="14"/><name val="Calibri"/></font><font><b/><sz val="11"/><color rgb="FF2E7D32"/><name val="Calibri"/></font></fonts>
-<fills count="10"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FFE0E0E0"/></patternFill></fill><fill><patternFill patternType="solid"><fgColor rgb="FFFFF3C4"/></patternFill></fill><fill><patternFill patternType="solid"><fgColor rgb="FFD6E6FF"/></patternFill></fill><fill><patternFill patternType="solid"><fgColor rgb="FFC8E6C9"/></patternFill></fill><fill><patternFill patternType="solid"><fgColor rgb="FFF0F0F0"/></patternFill></fill><fill><patternFill patternType="solid"><fgColor rgb="FFBDBDBD"/></patternFill></fill><fill><patternFill patternType="solid"><fgColor rgb="FFFFE0B2"/></patternFill></fill><fill><patternFill patternType="solid"><fgColor rgb="FFFDEAEA"/></patternFill></fill></fills>
+<fills count="11"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FFE0E0E0"/></patternFill></fill><fill><patternFill patternType="solid"><fgColor rgb="FFFFF3C4"/></patternFill></fill><fill><patternFill patternType="solid"><fgColor rgb="FFD6E6FF"/></patternFill></fill><fill><patternFill patternType="solid"><fgColor rgb="FFC8E6C9"/></patternFill></fill><fill><patternFill patternType="solid"><fgColor rgb="FFF0F0F0"/></patternFill></fill><fill><patternFill patternType="solid"><fgColor rgb="FFBDBDBD"/></patternFill></fill><fill><patternFill patternType="solid"><fgColor rgb="FFFFE0B2"/></patternFill></fill><fill><patternFill patternType="solid"><fgColor rgb="FFFDEAEA"/></patternFill></fill><fill><patternFill patternType="solid"><fgColor rgb="FFE4EBF5"/></patternFill></fill></fills>
 <borders count="2"><border><left/><right/><top/><bottom/><diagonal/></border><border><left style="thin"/><right style="thin"/><top style="thin"/><bottom style="thin"/><diagonal/></border></borders>
 <cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>
-<cellXfs count="20">
+<cellXfs count="24">
 <xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>
 <xf numFmtId="0" fontId="3" fillId="0" borderId="0" xfId="0" applyFont="1"/>
 <xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1"/>
@@ -882,6 +884,10 @@ const XLSX_STYLES = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <xf numFmtId="0" fontId="1" fillId="8" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>
 <xf numFmtId="0" fontId="2" fillId="9" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>
 <xf numFmtId="0" fontId="1" fillId="2" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>
+<xf numFmtId="0" fontId="0" fillId="10" borderId="1" xfId="0" applyFill="1" applyBorder="1" applyAlignment="1"><alignment vertical="top" wrapText="1"/></xf>
+<xf numFmtId="0" fontId="0" fillId="10" borderId="1" xfId="0" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="top"/></xf>
+<xf numFmtId="0" fontId="2" fillId="10" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment vertical="top" wrapText="1"/></xf>
+<xf numFmtId="0" fontId="0" fillId="10" borderId="1" xfId="0" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>
 </cellXfs>
 <cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>
 </styleSheet>`;
@@ -901,8 +907,8 @@ function checklistSheet() {
     const p = st.prog[x.key] || {};
     const textStyle = x.important ? (x.extra ? XS.impX : XS.imp) : (x.extra ? XS.xCell : XS.cell);
     const ctr = x.extra ? XS.xCenter : XS.center;
-    s.add([[0, i + 1, ctr], [1, x.text, textStyle], [2, p.s === 'ok' ? '✓' : '', ctr],
-      [3, p.s === 'no' ? '✗' : '', ctr], [4, p.n || '', x.extra ? XS.xCell : XS.cell]]);
+    s.add(zebra([[0, i + 1, ctr], [1, x.text, textStyle], [2, p.s === 'ok' ? '✓' : '', ctr],
+      [3, p.s === 'no' ? '✗' : '', ctr], [4, p.n || '', x.extra ? XS.xCell : XS.cell]], i));
   });
   if (st.rows.some((x) => x.extra)) {
     s.skip();
@@ -983,6 +989,8 @@ const PDF_ST = {
   13: { bg: '#F0F0F0', box: 1, mid: 1 }, 14: { b: 1, bg: '#BDBDBD', box: 1, mid: 1 }, 15: { b: 1, c: '#C62828', box: 1, mid: 1 },
   16: { b: 1, c: '#2E7D32', box: 1, mid: 1 }, 17: { b: 1, bg: '#FFE0B2', box: 1, mid: 1 },
   18: { b: 1, c: '#C62828', bg: '#FDEAEA', box: 1, mid: 1 }, 19: { b: 1, bg: '#E0E0E0', box: 1, mid: 1 },
+  20: { bg: '#E4EBF5', box: 1, wrap: 1 }, 21: { bg: '#E4EBF5', box: 1, mid: 1 },
+  22: { b: 1, c: '#C62828', bg: '#E4EBF5', box: 1, wrap: 1 }, 23: { bg: '#E4EBF5', box: 1, mid: 1 },
 };
 
 // Αναδίπλωση κειμένου στο πλάτος w (σπάει και πολύ μεγάλες λέξεις).

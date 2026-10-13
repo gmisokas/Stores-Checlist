@@ -2080,7 +2080,7 @@ function blankChecklistSheet(section, store, label) {
   rows.forEach((x, i) => {
     const textStyle = x.important ? (x.extra ? XS.impX : XS.imp) : (x.extra ? XS.xCell : XS.cell);
     const ctr = x.extra ? XS.xCenter : XS.center;
-    s.add([[0, i + 1, ctr], [1, x.text, textStyle], [2, '', ctr], [3, '', ctr], [4, '', x.extra ? XS.xCell : XS.cell]]);
+    s.add(zebra([[0, i + 1, ctr], [1, x.text, textStyle], [2, '', ctr], [3, '', ctr], [4, '', x.extra ? XS.xCell : XS.cell]], i));
   });
   if (rows.some((x) => x.extra)) s.add([[0, 'Οι κίτρινες γραμμές αφορούν ιδιαιτερότητες του συγκεκριμένου καταστήματος.', 0]]);
   const sheet = makeSheet(SECTIONS[section], s, [[1, 1, 4], [2, 2, 85], [3, 4, 5], [5, 5, 28]], '', 'portrait', [headRow, headRow], true);
@@ -2107,13 +2107,20 @@ function blankLogSheet(ym, type, counts, label) {
   s.add(head);
   s.add(head2);
   const headRow = s.r;
-  units.forEach((u) => {
+  units.forEach((u, i) => {
     const cells = [[0, u.eq.name, XS.cell], [1, u.no || '', XS.center], [2, freqText(u.rule), XS.cell]];
     for (let d = 1; d <= mi.dim; d++) cells.push([D + d - 1, '', we(d) ? XS.dWe : XS.dCell]);
-    s.add(cells, 26);
+    s.add(zebra(cells, i), 26);
   });
   if (!units.length) s.add([[0, 'Δεν επιλέχθηκε εξοπλισμός.', 0]]);
   return makeSheet(LOG_TYPES[type], s, [[1, 1, 30], [2, 2, 5], [3, 3, 21], [D + 1, D + mi.dim, 4.4]], '', 'landscape', [headRow - 1, headRow], true);
+}
+
+// Κάθε δεύτερη γραμμή με απαλό φόντο (οι κίτρινες, τα Σαββατοκύριακα κ.λπ. μένουν όπως είναι).
+function zebra(cells, i) {
+  if (!(i % 2)) return cells;
+  const z = { [XS.cell]: XS.zCell, [XS.center]: XS.zCenter, [XS.imp]: XS.zImp, [XS.dCell]: XS.zDCell };
+  return cells.map(([col, v, st]) => [col, v, z[st] || st]);
 }
 
 function colName(n) {
@@ -2182,7 +2189,7 @@ function logSheet(src, sk, ym, type, counts) {
   s.add(head2);
   const headRow = s.r;
 
-  units.forEach((u) => {
+  units.forEach((u, ui) => {
     const ts = tasks.filter((t) => t.u.key === u.key);
     const byDay = {};
     ts.forEach((t) => { byDay[t.day] = t; });
@@ -2200,7 +2207,7 @@ function logSheet(src, sk, ym, type, counts) {
     const sums = [ts.length, n.ok, n.late, n.missed, n.skip, n.overdue + n.due + n.todo];
     const style = [XS.center, XS.good, n.late ? XS.dLate : XS.center, n.missed ? XS.bad : XS.center, XS.center, XS.center];
     sums.forEach((v, i) => cells.push([last + i, v, style[i]]));
-    s.add(cells);
+    s.add(zebra(cells, ui));
   });
   if (!units.length) s.add([[0, 'Δεν επιλέχθηκε εξοπλισμός.', 0]]);
 
@@ -2229,13 +2236,13 @@ function logEntriesSheet(src, sk, ym) {
   s.add([[0, 'Ημερομηνία', XS.head], [1, 'Είδος', XS.head], [2, 'Εξοπλισμός / χώρος', XS.head], [3, 'Νο', XS.head],
     [4, 'Κατάσταση', XS.head], [5, 'Υπεύθυνος', XS.head], [6, 'Καταχωρήθηκε', XS.head]]);
   const headRow = s.r;
-  entries.forEach((e) => {
+  entries.forEach((e, i) => {
     const eq = eqById(e.eq);
     const at = e.at ? new Date(e.at) : null;
-    s.add([[0, fmtDate(e.d), XS.center], [1, LOG_TYPES[e.t] || '', XS.cell], [2, eq ? eq.name : '(διαγραμμένος εξοπλισμός)', XS.cell],
+    s.add(zebra([[0, fmtDate(e.d), XS.center], [1, LOG_TYPES[e.t] || '', XS.cell], [2, eq ? eq.name : '(διαγραμμένος εξοπλισμός)', XS.cell],
       [3, e.no || '', XS.center],
       [4, e.skip ? `Δεν έγινε – ${PlanCalc.WHY[e.skip] || ''}${e.note ? ': ' + e.note : ''}` : 'Έγινε', e.skip ? XS.imp : XS.cell],
-      [5, e.by || '', XS.cell], [6, at ? `${fmtDate(localISO(at)).slice(0, 5)} ${at.toTimeString().slice(0, 5)}` : '', XS.center]]);
+      [5, e.by || '', XS.cell], [6, at ? `${fmtDate(localISO(at)).slice(0, 5)} ${at.toTimeString().slice(0, 5)}` : '', XS.center]], i));
   });
   if (!entries.length) s.add([[0, 'Καμία καταχώρηση αυτόν τον μήνα.', 0]]);
   const cols = [[1, 1, 12], [2, 2, 20], [3, 3, 34], [4, 4, 5], [5, 5, 34], [6, 6, 26], [7, 7, 14]];

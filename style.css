@@ -365,38 +365,29 @@ dialog textarea { width: 100%; }
 /* ---------- Εκτύπωση A4 ---------- */
 @page { size: A4; margin: 10mm; }
 
+/* Τα στυλ του εντύπου ισχύουν πάντα (το #print-area φαίνεται μόνο στο χαρτί ή όσο μετριέται το μέγεθός του). */
+#print-area { --pfs: 9pt; font-size: var(--pfs); line-height: 1.2; }
+#print-area.sizing { display: block; position: absolute; left: -9999px; top: 0; width: 190mm; visibility: hidden; }
+#print-area * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+.p-title { margin: 0 0 3mm; font-size: 1.45em; }
+.p-fields { display: flex; gap: 6mm; margin-bottom: 3mm; font-size: 1.1em; }
+.p-fields span { flex: 1; border-bottom: 1px solid #000; padding-bottom: 1mm; }
+.p-legend { display: flex; gap: 2mm; align-items: center; margin: 0 0 2mm; font-size: .95em; }
+.p-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+.p-table th, .p-table td { border: 1px solid #555; padding: 0.8mm 1.5mm; vertical-align: top; }
+.p-table th { background: #eee; text-align: left; }
+.p-table tr { break-inside: avoid; }
+.p-table .c-num { width: 8mm; text-align: center; }
+.p-table .c-mark { width: 9mm; text-align: center; font-size: 1.25em; font-weight: 700; }
+.p-table .c-note { width: 48mm; }
+.p-table tr.extra td { background: var(--extra); }
+.p-table tr.important td.c-text { color: var(--important); font-weight: 800; }
+
 @media print {
   body { background: #fff; }
   #app, .toast, dialog { display: none !important; }
-  #print-area { display: block; font-size: 8.8pt; line-height: 1.2; }
-  #print-area * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-
-  .p-title { margin: 0 0 3mm; font-size: 13pt; }
-  .p-fields { display: flex; gap: 6mm; margin-bottom: 3mm; font-size: 10pt; }
-  .p-fields span { flex: 1; border-bottom: 1px solid #000; padding-bottom: 1mm; }
-  .p-legend { display: flex; gap: 2mm; align-items: center; margin: 0 0 2mm; font-size: 8.5pt; }
-
-  .p-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
-  .p-table th, .p-table td { border: 1px solid #555; padding: 0.8mm 1.5mm; vertical-align: top; }
-  .p-table th { background: #eee; text-align: left; }
-  .p-table tr { break-inside: avoid; }
-  .p-table .c-num { width: 8mm; text-align: center; }
-  .p-table .c-mark { width: 9mm; text-align: center; font-size: 11pt; font-weight: 700; }
-  .p-table .c-note { width: 48mm; }
-  .p-table tr.extra td { background: var(--extra); }
-  .p-table tr.important td.c-text { color: var(--important); font-weight: 800; }
+  #print-area { display: block; }
 }
-
-.result { white-space: pre-wrap; word-break: break-word; font: inherit; font-size: 14px; }
-.box .btn { width: 100%; margin-top: 10px; }
-
-.pick-hint { padding: 18px 14px; text-align: center; color: var(--muted); background: var(--card); border: 1px dashed var(--line); border-radius: 14px; }
-.notify { margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--line); display: grid; gap: 8px; }
-.notify label { display: grid; gap: 4px; font-size: 14px; color: var(--muted); }
-.notify select { width: 100%; min-height: 44px; padding: 8px; border: 1px solid var(--line); border-radius: 8px; background: #fff; color: var(--text); }
-.btn.viber { display: block; text-align: center; text-decoration: none; background: #7360f2; border-color: #7360f2; color: #fff; }
-.btn.viber[aria-disabled="true"] { opacity: .45; pointer-events: none; }
-.notify-chk { color: var(--brand); }
 @media print { .notify { display: none; } }
 
 /* ---------- Αρχείο καθαριοτήτων / αποψύξεων ---------- */

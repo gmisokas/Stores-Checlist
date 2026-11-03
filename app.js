@@ -7,7 +7,7 @@
    ========================================================== */
 
 // Έκδοση της εφαρμογής. Σε κάθε αλλαγή: ίδιος αριθμός εδώ, στο version.json και στα ?v= του index.html.
-const APP_VERSION = '32';
+const APP_VERSION = '33';
 // Οι ενότητες γράφονται πάντα με κεφαλαία (ΑΝΟΙΓΜΑ, ΚΛΕΙΣΙΜΟ, ΚΑΘΑΡΙΟΤΗΤΕΣ / ΑΠΟΨΥΞΕΙΣ).
 const SECTIONS = { opening: 'ΑΝΟΙΓΜΑ', closing: 'ΚΛΕΙΣΙΜΟ' };
 // Τίτλος στη μπάρα κάθε ενότητας (στον υπεύθυνο, ανάλογα με την οθόνη: managerTitle στο cleaning.js).
@@ -775,11 +775,26 @@ function renderPrint() {
       h('span', {}, 'Ημερομηνία: ', fmtDate(f.date.value)),
       h('span', {}, 'Υπεύθυνος: ', f.name.value.trim()),
       h('span', {}, 'Κατάστημα: ', storeLabel())),
-    s.rows.some((r) => r.extra)
-      ? h('p', { class: 'p-legend' }, h('span', { class: 'swatch' }),
-        'Η χρωματισμένη γραμμή αφορά ιδιαιτερότητα του συγκεκριμένου καταστήματος.')
-      : null,
+    ...(s.rows.some((r) => r.extra)
+      ? [h('p', { class: 'p-legend' }, h('span', { class: 'swatch' }),
+        'Η χρωματισμένη γραμμή αφορά ιδιαιτερότητα του συγκεκριμένου καταστήματος.')]
+      : []),
     table);
+  fitPrintToPage();
+}
+
+// Ό,τι τυπώνεται από την «Εκτύπωση A4» χωράει πάντα σε μία σελίδα: μικραίνει σταδιακά το μέγεθος γραμμάτων.
+function fitPrintToPage() {
+  const area = $('print-area');
+  const maxH = (297 - 20) / 25.4 * 96 * 0.97; // A4 μείον τα περιθώρια των 10 mm, με μικρό περιθώριο ασφαλείας
+  area.classList.add('sizing');
+  let pt = 9.5;
+  area.style.setProperty('--pfs', pt + 'pt');
+  while (area.scrollHeight > maxH && pt > 4) {
+    pt -= 0.25;
+    area.style.setProperty('--pfs', pt + 'pt');
+  }
+  area.classList.remove('sizing');
 }
 
 /* ---------- Αποθήκευση σε Excel (.xlsx) ---------- */
@@ -915,7 +930,10 @@ function checklistSheet() {
     s.add([[0, 'Οι κίτρινες γραμμές αφορούν ιδιαιτερότητες του συγκεκριμένου καταστήματος.', 0]]);
   }
   const pane = `ySplit="${headRow}" topLeftCell="A${headRow + 1}" activePane="bottomLeft"`;
-  return makeSheet(SECTIONS[state.section], s, [[1, 1, 5], [2, 2, 70], [3, 4, 5], [5, 5, 35]], pane, 'portrait', [headRow, headRow]);
+  // Πάντα μία σελίδα A4 (το PDF μικραίνει τα γράμματα αν χρειάζεται, το Excel έχει «χωράει σε μία σελίδα»).
+  const sheet = makeSheet(SECTIONS[state.section], s, [[1, 1, 4], [2, 2, 85], [3, 4, 5], [5, 5, 28]], pane, 'portrait', [headRow, headRow], true);
+  sheet.grow = 1;
+  return sheet;
 }
 
 // Ένα φύλλο: γραμμές XML, πλάτη στηλών, «πάγωμα» κεφαλίδας, προσανατολισμός A4.
